@@ -1,0 +1,13 @@
+{
+  "extends": "astro/tsconfigs/strict",
+  "include": [".astro/types.d.ts", "**/*"],
+  "exclude": ["dist", "node_modules", "drizzle"],
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "module": "preserve",
+    "types": ["node", "vitest/globals"]
+  }
+}

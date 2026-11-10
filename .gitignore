@@ -1,0 +1,19 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+.astro/
+coverage/
+
+# local data (SQLite lives here)
+data/
+
+# env
+.env
+.env.*
+!.env.example
+
+# logs / os
+*.log
+.DS_Store
