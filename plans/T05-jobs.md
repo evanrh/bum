@@ -5,92 +5,75 @@ Depends on: T01, T02
 
 ## Goal
 
-The scheduled-job process: a node-cron runner in `src/jobs/` that performs
-the daily rotation reconciliation (auto-skips). Runs as its own process (`node src/jobs/run.ts`) and, later, its own
-container (T08).
+The scheduled-job process: a node-cron runner in `src/jobs/` that advances
+the rotation queue at week boundaries. Runs as
+its own process (`node src/jobs/run.ts`) and, later, its own container
+(T08).
 
 ## Deliverables
 
-### 1. Reconciliation — `src/jobs/reconcile.ts`
+### 1. Queue advance — `src/jobs/advance.ts`
 
-Export `reconcile(db, {now, log})` — idempotent, correct across restarts
-and downtime:
+Export `advanceRotation(db, {now, log})` — idempotent, correct across
+restarts and downtime:
 
-1. Load settings; `settings.last_reconciled_week` is the checkpoint
-   (null = never ran → process from `rotation_epoch`'s week onward).
-2. Determine every week start (ISO) from the checkpoint **up to and
-   including the most recently fully-ended week** (`addWeeksISO(current,
-   -1)`). The current week is never skipped — it's in progress.
-3. For each such week: picker = `pickerFor(users as-of-now,
-   weekIndex(w), rotation_offset)`. If a picker exists and
-   `albums.getByWeekStart(w)` is missing → `skippedTurns.record(w, picker,
-   'auto')` (INSERT OR IGNORE: existing `'admin'` rows stand; existing
-   `'auto'` rows are no-ops).
-   - Historical-fidelity note: picker identity for past weeks is computed
-     with *today's* member list/offset. Auto-skips only ever target a
-     week's original picker when nothing changed; admin skips bump offset
-     and record themselves — reconcile must **not** write a second row for
-     the same (week, user) and must accept that an admin skip already
-     covered the week. The UNIQUE(week_start, user_id) constraint does the
-     heavy lifting; the `record` no-op behavior keeps this correct.
-4. Advance `settings.last_reconciled_week` to the last processed week
-   **only if** processing reached it (do not advance when an error
-   occurred mid-loop).
-5. One-line summary log: weeks processed, skips recorded;
-   full list of new skip rows at debug level.
+1. Load settings; `currentWeek = weekId(now)` (T02 helpers).
+2. `pending = pendingAdvances(settings.last_rotated_week, currentWeek)`.
+3. Null checkpoint → set `last_rotated_week = currentWeek` and stop
+   (bootstrap: the admin-defined queue order starts as-is; no rotation,
+   no audit row).
+4. For each of the `pending` elapsed weeks, oldest first, in one
+   transaction per week: `rotateQueue` (pop head → append; skip silently
+   when the queue is empty), write an `audit_log` row (actor null, action
+   `queue.advance`, detail naming the week), then move
+   `last_rotated_week` forward one week. The checkpoint advances only
+   for completed weeks — a crash leaves it where it was.
+5. One-line summary log: advances applied.
 
 Failures: let the process crash on unexpected DB errors (supervisor-level
-restart is the policy; the checkpoint prevents double-recording) — but a
-thrown error must leave the checkpoint unchanged (advance it last).
+restart is the policy) — idempotence makes the next run a no-op.
 
 ### 2. Entrypoint — `src/jobs/run.ts`
 
-- On boot: run `migrate` logic (reuse `src/db/migrate.ts`'s exported
-  function — refactor it to export `applyMigrations(db)`), then
-  `reconcile` **once immediately** (safe/idempotent), then schedule
-  node-cron: daily at `00:10` **in the configured timezone** (`cron.schedule('10 0 * * *', …, { timezone })`; re-read the timezone from
-  settings on each invocation so admin edits apply without restart — if
-  node-cron can't re-read dynamically, reschedule on change).
-- If `process.env.JOBS_CRON='off'`: run once and exit (useful for tests
-  and one-shot containers).
+- On boot: apply migrations (reuse `src/db/migrate.ts`'s exported
+  `applyMigrations(db)`), run `advanceRotation` once immediately (safe /
+  idempotent), then schedule node-cron: daily at `00:15` with
+  `{ timezone: 'America/New_York' }` (hardcoded — the same locked
+  assumption as the week math). Daily scheduling is belt-and-braces:
+  `advanceRotation` itself decides how many weeks were missed, so a
+  missed Monday self-heals on the next run.
+- If `process.env.JOBS_CRON === 'off'`: run once and exit (export a
+  `runOnce()` the tests import; keep `run.ts` itself a thin wrapper).
 - Graceful SIGTERM/SIGINT: stop the task and exit 0. Log "jobs runner
-  ready" with the active timezone at boot.
+  ready" at boot.
 
 ### 3. Tests — `test/jobs/*.test.ts`
 
-Fixture builder: settings (epoch = known Monday, tz UTC, day 1,
-hour 0) + 4 members + helper to set `now`.
+Fixture builder: migrate a fresh `:memory:` DB, seed settings with queue
+`[A,B,C,D]` and null checkpoint; inject `now`.
 
-- A ended week where picker submitted → no skip row.
-- An ended week with no submission → `'auto'` row for the week's picker;
-  **second run writes nothing** (idempotence) and checkpoint advances
-  once.
-- The current week is in progress with no submission → no row.
-- Never-reconciled db (null checkpoint) → processes all weeks since
-  epoch in one run.
-- Catch-up after "downtime": simulate by running reconcile with now =
-  week N, then now = week N+3 → processes N+1, N+2, N+3's predecessor,
-  checkpoint lands on N+2; nothing from N+3's week-onward.
-- Admin skip pre-recorded for (week, user) → reconcile adds no `auto`
-  row for that pair; UNIQUE constraint would have caught it anyway —
-  assert `record` returned `inserted: false` and only one row exists.
-- DST: settings with America/New_York across a transition — reconcile
-  processes boundary weeks correctly (calendar-day logic from T02).
-- Zero members → no rows, no crash; negative weekIndex (epoch in future)
-  → immediate no-op with checkpoint unset.
-- Entrypoint (no-cron path): `JOBS_CRON=off` runs reconcile once and
-  exits 0 (assert via the exported `runOnce()` function; keep `run.ts`
-  itself a thin wrapper so tests import `runOnce` with injected db).
+- Bootstrap run (null checkpoint) → checkpoint set, no rotation, no audit
+  rows.
+- One elapsed week → single advance: queue `[B,C,D,A]`, one
+  `queue.advance` audit row, checkpoint = the advanced-from week.
+- Catch-up after simulated downtime: run with `now` = week N, then
+  `now` = week N+3 → exactly 3 advances in order, each audited; a second
+  run is a no-op.
+- Same-week reruns (the daily cron) → nothing happens.
+- Empty queue → no rotation, no audit rows, checkpoint still advances.
+- DST week: a range spanning an America/New_York transition still
+  advances exactly once per calendar week (calendar-day math from T02).
+- `JOBS_CRON=off` entrypoint path: `runOnce()` exits 0.
 
 ## Acceptance criteria
 
-- [ ] `node src/jobs/run.ts` boots, applies migrations, reconciles, logs
-      readiness; `JOBS_CRON=off node src/jobs/run.ts` exits 0
-- [ ] Reconciliation is idempotent across restarts; a fresh DB can
-      "catch up" many weeks in a single run
+- [ ] `node src/jobs/run.ts` boots, migrates, advances, logs
+      readiness; exits 0 under `JOBS_CRON=off`
+- [ ] Down for 3 weeks → exactly 3 advances on the first run back;
+      repeat runs are no-ops
 - [ ] `npm test` / coverage green (coverage includes `src/jobs/**`)
 
 ## Out of scope
 
-Admin skip endpoint (T07 — that's a synchronous request path), any
-delivery of alerts (none exists yet), Dockerization (T08).
+Admin skip (T07 — a synchronous request path), alerting (none exists),
+Dockerization (T08).

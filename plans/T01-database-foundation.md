@@ -119,6 +119,21 @@ suite. Required cases (non-exhaustive, aim wide):
 Also: **replace `test/smoke.test.ts`** with a `test/db/migrate.test.ts`
 migration test once the real tests exist (delete the placeholder).
 
+## Deviations & notes
+
+- **2026-11-10 — rotation redesign supersedes parts of this schema.**
+  The owner fixed the deployment to US Eastern and replaced the
+  offset/index model with an explicit queue. T02 carries one follow-up
+  migration: drops `settings.{rotation_epoch, week_start_day,
+  week_start_hour, timezone, rotation_offset, last_reconciled_week}`
+  (adds `settings.rotation` — a JSON array of user ids — and
+  `settings.last_rotated_week`), drops `users.rotation_order`, and
+  replaces the `skipped_turns` table with a generic `audit_log` (actor,
+  action, detail, created_at). `src/db/repos/skipped-turns.ts` and its
+  tests are deleted. The requirements above are kept verbatim for
+  history; see "Rotation semantics" in `plans/README.md` for the current
+  model.
+
 ## Acceptance criteria
 
 - [x] `npm run db:generate` produces the migration; `drizzle/` contains the

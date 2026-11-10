@@ -28,9 +28,9 @@ the built `node dist/server/entry.mjs` with a temp `DATABASE_URL`):
    (same score count).
 7. Admin: change group_name; add a member via join code; rotate the join
    code; old code now fails signup (401/403).
-8. Admin skip: bump the server clock impossible — instead validate via
-   the API (skip → new picker for the remainder) and verify B is now the
-   picker by B submitting successfully.
+8. Admin skip: validate via the API (skip → new picker for the
+   remainder, audit log gains a `queue.override` row) and verify B is
+   now the picker by B submitting successfully.
 9. Log out + anonymous `GET /api/albums` → 200 (public read), and a
    mutation → 401.
 
@@ -52,9 +52,10 @@ npm run db:migrate && npm run db:seed   # or just `npm run dev`
 ```
 
 Plus ops notes: data location, join-code rotation UI pointer, timezone
-setting, backup one-liner, jobs container behavior, and a
-troubleshooting table (WAL lock with two writers,
-`last_reconciled_week` resets on manual DB swaps).
+(hardcoded `America/New_York` — the app assumes Eastern by design),
+backup one-liner, jobs container behavior, and a troubleshooting table
+(WAL lock with two writers, `last_rotated_week` rewinds on manual DB
+swaps → the job replays the missed weeks exactly once).
 
 ### 3. Full-suite verification
 
