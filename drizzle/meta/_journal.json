@@ -1,13 +1,18 @@
 {
-  "version": "7",
-  "dialect": "sqlite",
-  "entries": [
-    {
-      "idx": 0,
-      "version": "6",
-      "when": 1794287729124,
-      "tag": "0000_nostalgic_ozymandias",
-      "breakpoints": true
-    }
-  ]
+	"version": "7",
+	"dialect": "sqlite",
+	"entries": [
+		{
+			"idx": 0,
+			"version": "6",
+			"when": 1794287729124,
+			"tag": "0000_nostalgic_ozymandias",
+			"breakpoints": true
+		},
+		{
+			"tag": "0001_curved_cloak",
+			"when": 1794329340565,
+			"hash": "bec294db223f61cafa73a7fc416d15e5608cf07a3f3afabfa8f7a38497f8f908"
+		}
+	]
 }

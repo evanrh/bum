@@ -11,9 +11,9 @@ export type CreateUserInput = {
 };
 
 /**
- * Insert a new user. `rotation_order` is assigned atomically as
- * max(existing) + 1 via a scalar subquery, so join order == creation order.
- * Throws on duplicate username (unique index is case-insensitive).
+ * Insert a new user. Join order == creation order (`joined_at`); the
+ * rotation order lives in the settings queue, not on the row. Throws on
+ * duplicate username (unique index is case-insensitive).
  */
 export async function createUser(db: Db, input: CreateUserInput, now: number): Promise<User> {
   const [user] = await db
@@ -23,7 +23,6 @@ export async function createUser(db: Db, input: CreateUserInput, now: number): P
       passwordHash: input.passwordHash,
       displayName: input.displayName,
       isAdmin: input.isAdmin,
-      rotationOrder: sql`(SELECT COALESCE(MAX(${users.rotationOrder}), 0) + 1 FROM ${users})`,
       joinedAt: now,
     })
     .returning();
@@ -55,11 +54,12 @@ export async function listActiveUsers(db: Db): Promise<User[]> {
     .select()
     .from(users)
     .where(eq(users.isActive, true))
-    .orderBy(asc(users.rotationOrder));
+    // Join order == creation order; id is the deterministic tiebreaker.
+    .orderBy(asc(users.joinedAt), asc(users.id));
 }
 
 export async function listAllUsers(db: Db): Promise<User[]> {
-  return db.select().from(users).orderBy(asc(users.rotationOrder));
+  return db.select().from(users).orderBy(asc(users.joinedAt), asc(users.id));
 }
 
 export async function setUserAdmin(db: Db, id: number, isAdmin: boolean): Promise<User> {
@@ -87,36 +87,4 @@ export async function setUserPassword(db: Db, id: number, passwordHash: string):
     .where(eq(users.id, id))
     .returning();
   return user;
-}
-
-/** Single-order write for admins nudging one slot. */
-export async function setRotationOrder(db: Db, id: number, order: number): Promise<User> {
-  const [user] = await db
-    .update(users)
-    .set({ rotationOrder: order })
-    .where(eq(users.id, id))
-    .returning();
-  return user;
-}
-
-/**
- * Batch assignment for admin reordering: the ids of the active members in
- * their intended rotation order. Normalizes to 1..n inside a transaction
- * and leaves inactive rows untouched.
- */
-export async function setRotationOrders(db: Db, orderedIds: number[]): Promise<User[]> {
-  const updated: User[] = [];
-  db.transaction((tx) => {
-    let order = 1;
-    for (const id of orderedIds) {
-      const rows = tx
-        .update(users)
-        .set({ rotationOrder: order++ })
-        .where(eq(users.id, id))
-        .returning()
-        .all();
-      if (rows.length > 0) updated.push(rows[0]);
-    }
-  });
-  return updated;
 }
