@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { appliedMigrationCount, applyMigrations, migrationsFolder } from '../../src/db/migrate.ts';
 import { createDatabase, type Db } from '../../src/db/index.ts';
 
-const TABLES = ['settings', 'users', 'albums', 'ratings', 'skipped_turns'];
+const TABLES = ['settings', 'users', 'albums', 'ratings', 'audit_log'];
 
 function tableNames(db: Db): string[] {
   const rows = db.$client.prepare('SELECT name FROM sqlite_master WHERE type = ?').all('table') as Array<{
@@ -35,10 +35,10 @@ describe('migrations', () => {
     expect(appliedMigrationCount(db)).toBe(afterFirst);
   });
 
-  it('record one journal entry per migration file (single file in the first release)', () => {
+  it('record one journal entry per migration file (base plus the rotation-queue amendment)', () => {
     const db = createDatabase(':memory:');
     applyMigrations(db);
-    expect(appliedMigrationCount(db)).toBe(1);
+    expect(appliedMigrationCount(db)).toBe(2);
     expect(migrationsFolder()).toMatch(/drizzle\/?$/);
   });
 

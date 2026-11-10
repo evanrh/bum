@@ -1,6 +1,6 @@
 # T02 — Rotation queue (schema amendment + rotation helpers)
 
-Status: ⬜
+Status: ✅
 Depends on: T01
 
 > **Redesigned 2026-11-10** (see T01's *Deviations & notes*): offset/index
@@ -121,12 +121,14 @@ against known Eastern wall clocks) — never host-zone-dependent.
 
 ## Acceptance criteria
 
-- [ ] `drizzle/0001_*.sql` applies on top of a real T01-migrated
-      database without touching user data
-- [ ] `src/lib/rotation.ts` exports the surface above (no DB/astro
-      imports); ~100% coverage of it (cheap — do it)
-- [ ] `skipped_turns` fully gone (schema, repo, tests)
-- [ ] `npm test` / `npm run test:coverage` / `npm run typecheck` green
+- [x] `drizzle/0001_*.sql` applies on top of a real T01-migrated
+      database without touching user data (staged-upgrade test seeds
+      rows in the old shape and asserts they survive)
+- [x] `src/lib/rotation.ts` exports the surface above (no DB/astro
+      imports); 100% statement/line coverage of it
+- [x] `skipped_turns` fully gone (schema, repo, tests)
+- [x] `npm test` / `npm run test:coverage` / `npm run typecheck` /
+      `npm run build` green
 
 ## Out of scope
 

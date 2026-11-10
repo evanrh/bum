@@ -9,6 +9,11 @@
 			"tag": "0000_nostalgic_ozymandias",
 			"breakpoints": true,
 			"hash": "256091813e324431ce42aa23d1480b44490d04fd099c7728ced21af95bc7424a"
+		},
+		{
+			"tag": "0001_curved_cloak",
+			"when": 1794329340565,
+			"hash": "bec294db223f61cafa73a7fc416d15e5608cf07a3f3afabfa8f7a38497f8f908"
 		}
 	]
 }
