@@ -26,8 +26,11 @@ criteria checked).
 
 ## Delegation protocol
 
-1. **One ticket per agent run.** Pick the lowest-numbered ticket whose
-   dependencies are ✅.
+1. **One ticket per agent run, on its own branch.** Pick the
+   lowest-numbered ticket whose dependencies are ✅, branch off `main`
+   (`feat/t03-auth`, …), and only touch that branch. Docs/plan changes
+   get a `docs/…` branch. `main` moves via PR merges only — see
+   `AGENTS.md`.
 2. Read the ticket top to bottom, then implement. Do not start dependent
    work belonging to later tickets "while you're in there".
 3. Every ticket carries its own tests. The suite (`npm test`) and the build
@@ -36,7 +39,8 @@ criteria checked).
    `refactor(T03): …`). One ticket may produce a few commits; prefix each
    with its ticket number.
 5. When acceptance criteria are all met: update the ticket's `Status:` line
-   and the index above (🚧 → ✅). If work is genuinely blocked, leave 🚧 and
+   and the index above (🚧 → ✅) **as part of the branch**, then open a PR
+   to `main` (see `AGENTS.md`). If work is genuinely blocked, leave 🚧 and
    append a **Deviations & notes** section explaining the blocker.
 6. **Never rewrite a completed ticket's requirements.** Clarifications and
    discovered edge cases go into the ticket's *Deviations & notes* section
