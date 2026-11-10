@@ -1,98 +1,134 @@
-# T02 — Rotation engine
+# T02 — Rotation queue (schema amendment + rotation helpers)
 
 Status: ⬜
-Depends on: T01 (types only — this ticket's logic is pure and DB-free)
+Depends on: T01
+
+> **Redesigned 2026-11-10** (see T01's *Deviations & notes*): offset/index
+> rotation math is replaced by an explicit queue in `settings.rotation`,
+> US Eastern is hardcoded, and `skipped_turns` becomes a generic
+> `audit_log`. This ticket applies the schema amendment, updates the
+> repos, and builds the pure helpers that T05 and T07 both consume.
 
 ## Goal
 
-Implement the pure rotation engine in `src/lib/rotation.ts` (currently a
-documented placeholder). This is the heart of the app and must be
-timezone-correct and exhaustively unit-tested. **No astro imports, no DB
-access** — pure functions over plain data.
+1. Amend the T01 schema to the queue model (one new migration, applying
+   cleanly to an existing T01 database).
+2. Update the `settings`/`users` repos, add an `audit` repo, delete the
+   skipped-turns repo.
+3. Implement the pure rotation helpers in `src/lib/rotation.ts` — no DB
+   access, no astro imports.
 
-## Spec (see `plans/README.md` "Rotation semantics" for the locked model)
+## Spec
 
-Export from `src/lib/rotation.ts`:
+### 1. Schema amendment — `drizzle/0001_*.sql`
+
+Edit `src/db/schema.ts`, then `npx drizzle-kit generate`:
+
+- `settings`: drop `rotation_epoch`, `week_start_day`,
+  `week_start_hour`, `timezone`, `rotation_offset`,
+  `last_reconciled_week`; add `rotation TEXT NOT NULL DEFAULT '[]'`
+  (JSON array of user ids; head = current picker) and
+  `last_rotated_week TEXT` (ISO Monday; weekly job checkpoint).
+- `users`: drop `rotation_order`.
+- Drop `skipped_turns`; create `audit_log`:
+
+  ```
+  audit_log
+    id INTEGER PK AUTOINCREMENT
+    actor_user_id INTEGER REFERENCES users(id)  -- null = system (jobs)
+    action TEXT NOT NULL      -- 'queue.advance' | 'queue.override' | …
+    detail TEXT
+    created_at INTEGER NOT NULL
+  ```
+
+- `src/db/seed.ts`: seed `rotation` with the seeded users in join order
+  (admin first); drop all epoch/offset fields; leave `last_rotated_week`
+  null (the jobs process bootstraps it).
+- Delete `src/db/repos/skipped-turns.ts` and
+  `test/db/skipped-turns.test.ts`.
+
+### 2. Repos
+
+- `settings.ts` — `getRotation(): number[]` (parses the JSON, tolerant
+  of empty), `setRotation(ids: number[])`, `setLastRotatedWeek(week:
+  null | string)`. Everything epoch/offset-related goes away; `get()`'s
+  bootstrap no longer sets epoch fields.
+- `users.ts` — `create()` no longer assigns `rotation_order`;
+  `listActive()` orders by `joined_at` instead; delete
+  `setRotationOrder` and its test coverage.
+- New `src/db/repos/audit.ts` — `record({actorUserId, action,
+  detail?})` and `listRecent(limit)` (joined with the actor's display
+  name; a null actor renders as "system" upstream).
+
+### 3. Pure helpers — `src/lib/rotation.ts`
 
 ```ts
-export type WeekStartOptions = {
-  weekStartDay: number;   // 0=Sun … 6=Sat
-  weekStartHour: number;  // 0-23
-  timezone: string;       // IANA name
-};
+export const TIMEZONE = 'America/New_York'; // locked ops assumption
 
-// --- week math ---
-startOfWeek(instant: Date, opts: WeekStartOptions): Date
-weekStartISO(instant: Date, opts: WeekStartOptions): string      // YYYY-MM-DD
-addWeeksISO(weekStart: string, weeks: number): string
-weekIndex(now: Date, settings: {rotation_epoch: string} & WeekStartOptions): number
-daysBetweenISO(a: string, b: string): number  // calendar days, a - b
+// Week ids are ISO Mondays in TIMEZONE — pure calendar arithmetic, no
+// boundary-hour concept. daysBetweenISO uses Date.UTC parts, so a DST
+// week (23/25 h) still counts as exactly 7 days.
+easternDateParts(now: Date): { y: number; m: number; d: number } // Intl, timeZone: TIMEZONE
+weekId(now: Date): string                    // Monday of now's Eastern calendar week
+weekStartsAt(week: string): Date             // Monday 00:00 TIMEZONE as an instant
+addWeeksISO(week: string, n: number): string
+daysBetweenISO(a: string, b: string): number // a − b, calendar days
 
-// --- picker math ---
-activeMembers(users: User[]): User[]            // is_active, by rotation_order asc
-euclideanMod(a: number, b: number): number      // ((a % b) + b) % b
-pickerFor(users: User[], weekIndex: number, rotationOffset: number): User | null
+// queue ops over user ids
+parseQueue(json: string | null): number[]
+rotateQueue(queue: number[]): { queue: number[]; moved: number | null }
+                             // pop head → append; empty → no-op (moved: null)
+pendingAdvances(lastRotatedWeek: string | null, currentWeek: string): number
+                             // null checkpoint → 0 (bootstrap elsewhere);
+                             // else daysBetweenISO(current, last) / 7
 
-// --- convenience used by the app layer ---
-currentTurn(settings, users, now):
-  { weekStart: string; weekIndex: number; picker: User | null; startedAt: Date; endsAt: Date }
+// app-facing convenience
+currentTurn(settings: { rotation: string | null }, now: Date):
+  { week: string; pickerId: number | null; startedAt: Date; endsAt: Date }
 ```
 
-Implementation requirements:
+`weekStartsAt` converts an Eastern wall-clock Monday 00:00 into an
+instant by seeding `Date.UTC(y, m, d, 4)` (the EDT candidate) and
+adjusting ±1 h from `Intl`-formatted Eastern parts until the local hour
+reads 00. That is the only DST-aware code in the app — a handful of
+lines, tested on both transitions. Everything else is calendar-day
+arithmetic.
 
-1. **Week boundary** must honor `weekStartDay`/`weekStartHour` in
-   `timezone`. Compute by walking the target weekday in the zone: use
-   `Intl.DateTimeFormat` with `timeZone`, `hour12: false`, to get local
-   parts of candidate instants, adjusting for offset shifts (standard
-   pattern: iterate/adjust ±1 day until local weekday/hour match). Do not
-   use `Date#getTimezoneOffset` (that's the host zone, not the target).
-2. **weekIndex** is calendar-day based as locked: normalize the epoch with
-   `startOfWeek` first, then `floor(daysBetweenISO(weekStartISO(now),
-   weekStartISO(epoch)) / 7)`. Wall-clock/DST hour drift must never
-   change the index; only crossing a boundary date does.
-3. **Normalization**: if `rotation_epoch` is not itself a week start, it
-   is silently normalized (an epoch mid-week still means "that week is
-   week 0").
-4. `pickerFor` handles: empty list → null; negative indices (epoch in the
-   future); offsets beyond ±many; offsets added to weekIndex before mod.
-5. `currentTurn` returns `endsAt` = next week's start instant (used for
-   the dashboard countdown) and `startedAt` = this week's start.
+## Tests — `test/lib/rotation.test.ts` + `test/db/rotation-schema.test.ts`
 
-## Tests — `test/lib/rotation.test.ts`
+Keep tests timezone-explicit by pinning instants (Unix ms computed once
+against known Eastern wall clocks) — never host-zone-dependent.
 
-Timezone-correctness is the risk area; test it hard:
-
-- helper to build a `Date` from local parts in a zone (e.g. via
-  `getOffsetMs` construction in tests) — keep tests timezone-explicit,
-  never host-zone-dependent (CI may run anywhere)
-- weekStart: for **America/New_York** across both DST transitions (March /
-  November): boundary instants every day/hour of the transition weeks
-- weekStart: UTC, and a half-hour offset zone (Asia/Kolkata), and a
-  southern-hemisphere zone (Australia/Sydney, DST opposite sign)
-- boundaries: `week_start_hour` = 0, 14, 23 — instants one second before
-  and one second after each boundary land in the correct week
-- weekIndex: monotonic across a boundary; unchanged across a DST "spring
-  forward" 23-hour week (calendar-day rule); epoch normalization (epoch
-  set to Wednesday normalizes to that week's Monday-equivalent)
-- pickerFor: single member; empty list; weekIndex × offset matrix
-  (offset 0/1/5/-1, indices 0-9); disabled member mid-cycle (count change
-  shifts subsequent picks — assert explicit expected sequences)
-- integration-style: a full simulated cycle — 5 members, 12 weeks,
-  offset bumped +1 after week 4 (admin skip): assert the complete picker
-  sequence with the burned turn (skipped member lands at the end of the
-  cycle, not one week later in place)
-- negative weekIndex (now before epoch) → submissions-disabled domain is
-  the caller's concern, but pickerFor/weekIndex must not throw
+- `weekId`: pinned instants for known Mondays; an instant that is Sunday
+  23:30 Eastern (belongs to the week that started 6 days earlier);
+  instants across both DST Sundays (the Eastern calendar date decides, so
+  the clock shift changes nothing)
+- `weekStartsAt`: spring-forward Monday (00:00 EDT → 04:00Z) and
+  fall-back Monday (00:00 EST → 05:00Z); `currentTurn().endsAt` is the
+  next Monday's instant
+- `daysBetweenISO`/`addWeeksISO`: across month and year boundaries
+- `rotateQueue`: 0/1/n members; a single-member rotate is a compositional
+  no-op; order otherwise preserved
+- `pendingAdvances`: equal weeks → 0; null checkpoint → 0; 1/3/12
+  elapsed; a range spanning a DST transition is still exactly one
+  advance per calendar week
+- schema test: apply the committed 0000 then 0001 migrations to a fresh
+  DB; old columns/tables gone, new columns + `audit_log` present,
+  `rotation` default `'[]'` round-trips
+- repos: `setRotation`/`getRotation` round-trip (incl. empty and
+  single-element); audit `record` with and without actor; `listRecent`
+  shaping and limit
 
 ## Acceptance criteria
 
-- [ ] `src/lib/rotation.ts` exports the full surface above with no DB/astro
-      imports
-- [ ] Coverage of `src/lib/rotation.ts` is ~100% (this file is cheap to
-      cover — do it)
-- [ ] All cases above green; `npm run test:coverage` passes
+- [ ] `drizzle/0001_*.sql` applies on top of a real T01-migrated
+      database without touching user data
+- [ ] `src/lib/rotation.ts` exports the surface above (no DB/astro
+      imports); ~100% coverage of it (cheap — do it)
+- [ ] `skipped_turns` fully gone (schema, repo, tests)
+- [ ] `npm test` / `npm run test:coverage` / `npm run typecheck` green
 
 ## Out of scope
 
-Recording skips (T05), the admin skip endpoint (T07 — it only writes
-`rotation_offset` + a `skipped_turns` row), rendering.
+Who calls the helpers when (T03 signup append, T05 weekly advance, T07
+admin skip), endpoints, UI.

@@ -59,8 +59,10 @@ note it in *Deviations & notes*.
   password }`. Rules: joining enabled (403 otherwise), join code verifies
   (401 on mismatch), username `^[A-Za-z0-9_-]{3,32}$` + display_name 1–64
   + password 8–128 (400), NOCASE duplicate username (409), rate limit
-  (429). First user ever → `is_admin = 1`. Creates a session; 201 +
-  `Set-Cookie`. Response body: safe user profile (never hash fields).
+  (429). First user ever → `is_admin = 1`. Every signup appends the new
+  user's id to the back of the rotation queue (settings repo from T02).
+  Creates a session; 201 + `Set-Cookie`. Response body: safe user
+  profile (never hash fields).
 - `POST /api/login` — body `{ username, password }`. Rate limit per
   `ip:username` (429). Unknown username vs wrong password → identical 401
   ("invalid username or password") to avoid oracle. Deactivated → 403

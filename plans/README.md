@@ -12,7 +12,7 @@ instead of repeating it.
 | # | Ticket | Depends on | Status |
 |---|---|---|---|
 | T01 | [Database foundation](T01-database-foundation.md) | — | ✅ |
-| T02 | [Rotation engine](T02-rotation-engine.md) | T01 (types only) | ⬜ |
+| T02 | [Rotation queue](T02-rotation-engine.md) | T01 | ⬜ |
 | T03 | [Auth & sessions](T03-auth-and-sessions.md) | T01, T02 | ⬜ |
 | T04 | [Albums & ratings](T04-albums-and-ratings.md) | T01, T02, T03 | ⬜ |
 | T05 | [Jobs](T05-jobs.md) | T01, T02 | ⬜ |
@@ -54,7 +54,8 @@ criteria checked).
 | Database | SQLite via `better-sqlite3` (synchronous driver), WAL mode |
 | ORM / migrations | Drizzle ORM; `drizzle-kit generate` authoring, migrations applied programmatically (`src/db/migrate.ts`) and as a one-shot compose step |
 | Auth | Per-user username + password (bcrypt, cost 12); rotatable join code gates signup; DB-backed sessions in HttpOnly cookies |
-| Scheduled jobs | node-cron in a separate long-lived process (its own container in compose) |
+| Scheduled jobs | node-cron in a separate long-lived process (its own container in compose); runs daily `00:15 America/New_York` |
+| Rotation | Explicit queue: `settings.rotation` (JSON array of user ids, head = current picker). Weeks are calendar Mondays `00:00` in hardcoded `America/New_York` — single-operator deployment, no per-deployment tz config |
 | Validation | Zod at every boundary (HTTP payloads, settings updates) |
 | Language / runtime | TypeScript (strict, `erasableSyntaxOnly`), Node >= 24 |
 | Runtime TS execution | Node 24 native type-stripping — all intra-project imports include the `.ts` extension; no enums/namespaces/parameter properties |
@@ -72,12 +73,8 @@ settings      singleton (id = 1)
   group_name TEXT NOT NULL DEFAULT 'Bum'
   join_code_hash TEXT NOT NULL                -- bcrypt hash of the signup join code
   joining_enabled INTEGER NOT NULL DEFAULT 1  -- admin can close signup
-  rotation_epoch TEXT NOT NULL                -- ISO date; start of week 0
-  week_start_day INTEGER NOT NULL DEFAULT 1   -- 0=Sun … 6=Sat
-  week_start_hour INTEGER NOT NULL DEFAULT 0  -- 0-23, boundary hour
-  timezone TEXT NOT NULL DEFAULT 'UTC'        -- IANA zone
-  rotation_offset INTEGER NOT NULL DEFAULT 0  -- bumped by admin skips
-  last_reconciled_week TEXT                   -- ISO date checkpoint for T05
+  rotation TEXT NOT NULL DEFAULT '[]'         -- JSON array of user ids; head = current picker
+  last_rotated_week TEXT                      -- ISO Monday; weekly-advance checkpoint
   created_at, updated_at INTEGER NOT NULL
 
 users
@@ -87,7 +84,6 @@ users
   display_name TEXT NOT NULL                    -- 1-64 chars
   is_admin INTEGER NOT NULL DEFAULT 0
   is_active INTEGER NOT NULL DEFAULT 1          -- soft "deletion"
-  rotation_order INTEGER NOT NULL               -- join order; admin-reorderable
   joined_at INTEGER NOT NULL
 
 sessions
@@ -119,43 +115,47 @@ ratings
   created_at, updated_at INTEGER NOT NULL
   UNIQUE (album_id, user_id)
 
-skipped_turns
+audit_log
   id INTEGER PK AUTOINCREMENT
-  week_start TEXT NOT NULL
-  user_id INTEGER NOT NULL REFERENCES users(id)
-  kind TEXT NOT NULL CHECK (kind IN ('auto', 'admin'))
-  recorded_at INTEGER NOT NULL
-  UNIQUE (week_start, user_id)
+  actor_user_id INTEGER REFERENCES users(id)  -- null = system (jobs process)
+  action TEXT NOT NULL          -- 'queue.advance' | 'queue.override' | …
+  detail TEXT                   -- short human-readable summary
+  created_at INTEGER NOT NULL
 ```
 
 ## Rotation semantics (locked)
 
-- `activeMembers` = users with `is_active = 1`, sorted ascending by
-  `rotation_order`.
-- Given settings `{rotation_epoch, week_start_day, week_start_hour,
-  timezone, rotation_offset}`:
-  - `weekStart(now)` = the most recent instant matching the configured
-    day/hour in the configured timezone. `week_start` is the ISO **date**
-    of that boundary's day.
-  - `weekIndex(week_start)` = calendar days between `week_start` and
-    `rotation_epoch`'s (normalized) week start ÷ 7, floored. Calendar-day
-    based on purpose: week boundaries must not drift under DST. Days
-    count via `Date.UTC(y, m, d)` differences.
-  - `picker = activeMembers[mod(weekIndex + rotation_offset, n)]` where
-    `mod` is Euclidean (always ≥ 0). `n = 0` (no members) → no picker.
-- Before `rotation_epoch` (negative week index): submissions disabled with
-  a clear error ("club hasn't started"); the epoch is normalized to its own
-  week start when read, so partial weeks are never negative.
-- **Weekly auto-skip** (T05 job): when a week has ended and its picker did
-  not submit, a `skipped_turns (week, picker, 'auto')` row is recorded.
-  Rotation is never blocked; the next member simply takes over.
-- **Admin skip** (T07): bumps `rotation_offset` by exactly 1 and records
-  `skipped_turns (current week, current picker, 'admin')`. Semantics: the
-  current picker's turn is burned (moves to the end of the current cycle
-  order); everyone after them takes their slot one week early. The standing
-  `rotation_order` is untouched. Allowed even if the picker had already
-  submitted (album stays, admin may delete it themselves); the skip button
-  is disabled once a skip row exists for that week.
+The rotation is an **explicit queue**, not math. `settings.rotation` is a
+JSON array of user ids; **the head (`rotation[0]`) is the current
+picker**. Weeks are calendar weeks: Monday `00:00` in hardcoded
+`America/New_York`. The week identifier is the ISO `YYYY-MM-DD` date of
+that Monday; album `week_start` uses it, so `week_start` values are
+always Mondays.
+
+- **Weekly advance (T05 job)** — the job runs daily shortly after
+  midnight Eastern. When `settings.last_rotated_week` (ISO Monday) is
+  behind the current week, it pops the queue head and appends them at
+  the back — **once per elapsed week** (a 3-week outage replays 3
+  advances). A null checkpoint means "never rotated": the job sets it to
+  the current week and does nothing (the admin-defined order starts
+  as-is). Every advance writes `audit_log` (actor null = system, action
+  `queue.advance`).
+- **Admin skip (T07)** — one manual pop/push of the head, any time: the
+  next member immediately becomes the picker for the rest of the week.
+  No offset accounting, no dedupe — repeat presses rotate again, each
+  logged as `queue.override` with the acting admin. Allowed even if the
+  head already submitted (the album stays; the response warns). The new
+  head simply cannot also submit this week (409, one album per week).
+- **Membership changes** — signup appends the new user's id to the back
+  of the queue (T03). Admin reorder rewrites the whole array (T07).
+  Deactivating a member removes their id from the queue wherever it
+  sits (head included — the next member takes over immediately);
+  reactivating appends them at the back unless already present.
+- **Empty queue** → no current picker; submissions disabled ("no
+  rotation defined"). There is no epoch and no negative-index state.
+- Catch-up arithmetic is calendar-day based (ISO dates via `Date.UTC`
+  parts), so DST weeks (23/25 h) still count as exactly 7 days —
+  `daysBetweenISO(a, b) / 7` between Mondays is always an integer.
 
 ## Auth & permissions (locked)
 
@@ -172,10 +172,10 @@ skipped_turns
   matches the request host when the header is present (CSRF guard for
   cookie auth). `GET` is exempt.
 - Permissions: admins can do everything (any album/rating edit or delete,
-  user management, rotation settings, join code, skips). Members rate
+  user management, rotation order + manual skip, join code). Members rate
   anything anytime and edit/delete **their own** rating; they submit only
-  during their assigned week. Deactivated members keep history but cannot
-  log in.
+  during their assigned week (when they head the queue). Deactivated
+  members keep history but cannot log in.
 
 ## External IDs, embeds, covers (locked)
 
