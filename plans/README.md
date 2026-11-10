@@ -11,7 +11,7 @@ instead of repeating it.
 
 | # | Ticket | Depends on | Status |
 |---|---|---|---|
-| T01 | [Database foundation](T01-database-foundation.md) | — | ⬜ |
+| T01 | [Database foundation](T01-database-foundation.md) | — | ✅ |
 | T02 | [Rotation engine](T02-rotation-engine.md) | T01 (types only) | ⬜ |
 | T03 | [Auth & sessions](T03-auth-and-sessions.md) | T01, T02 | ⬜ |
 | T04 | [Albums & ratings](T04-albums-and-ratings.md) | T01, T02, T03 | ⬜ |

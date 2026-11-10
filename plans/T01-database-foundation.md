@@ -1,6 +1,6 @@
 # T01 — Database foundation
 
-Status: ⬜
+Status: ✅
 Depends on: —
 
 ## Goal
@@ -121,16 +121,37 @@ migration test once the real tests exist (delete the placeholder).
 
 ## Acceptance criteria
 
-- [ ] `npm run db:generate` produces the migration; `drizzle/` contains the
+- [x] `npm run db:generate` produces the migration; `drizzle/` contains the
       SQL with all CHECK/UNIQUE/FK constraints visible
-- [ ] `node src/db/migrate.ts` creates a fully-populated empty schema (spot
-      check with `sqlite3 data/dev.db .schema` or a test-only script)
-- [ ] All 5 schema objects + repos exist with the exact columns of the
+- [x] `node src/db/migrate.ts` creates a fully-populated empty schema
+      (verified via CLI run against a temp file + table/row count spot check)
+- [x] All 5 schema objects + repos exist with the exact columns of the
       canonical model
-- [ ] Seed script populates demo data on a fresh DB and is idempotent by
+      canonical model
+- [x] Seed script populates demo data on a fresh DB and is idempotent by
       default (refuses without `--force`)
-- [ ] `npm test` green; `npm run test:coverage` ≥ thresholds over
-      `src/db/**`
+- [x] `npm test` green; `npm run test:coverage` ≥ thresholds over
+      `src/db/**` (87% statements / 84% branches / 89% functions / 88%
+      lines overall; repos ≥ 94%)
+
+## Deviations & notes
+
+- **Case-insensitive username uniqueness**: the installed drizzle-orm
+  (0.45.4) has no SQLite column `collate` support, so the locked NOCASE
+  behavior is implemented as an expression unique index —
+  `CREATE UNIQUE INDEX users_username_unique ON users (lower("username"))`.
+  Equivalent for our ASCII username charset (`[A-Za-z0-9_-]`); lookups use
+  `lower(username) = lower(?)`.
+- **`Db` type** is `ReturnType<typeof createDatabase>` rather than the bare
+  `BetterSQLite3Database` alias, so the raw client (`$client`) is part of
+  the type — used by the migration-journal query and CHECK-constraint
+  tests. All normal code stays on drizzle's typed query builder.
+- **Seed join code** is pinned through the `BOOTSTRAP_JOIN_CODE` env var
+  (set and restored around the bootstrap call) so it flows through the
+  same code path production uses.
+- **Coverage**: `src/lib/rotation.ts` is currently a type-only placeholder
+  (T02) and therefore absent from the coverage report; thresholds are met
+  without it.
 
 ## Out of scope
 

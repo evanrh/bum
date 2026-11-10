@@ -1,0 +1,14 @@
+{
+	"version": "7",
+	"dialect": "sqlite",
+	"entries": [
+		{
+			"idx": 0,
+			"version": "6",
+			"when": 1794287729124,
+			"tag": "0000_nostalgic_ozymandias",
+			"breakpoints": true,
+			"hash": "256091813e324431ce42aa23d1480b44490d04fd099c7728ced21af95bc7424a"
+		}
+	]
+}
