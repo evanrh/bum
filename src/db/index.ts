@@ -1,24 +1,30 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-
 import Database from 'better-sqlite3';
-import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
 
 import * as schema from './schema.ts';
 
-export type Db = BetterSQLite3Database<typeof schema>;
+/**
+ * Drizzle instance plus the underlying better-sqlite3 client (`$client`),
+ * used by tests and small raw-SQL touches (e.g. the migration journal).
+ */
+export type Db = ReturnType<typeof createDatabase>;
 
 /**
  * SQLite database path, overridable for tests and Docker via
- * DATABASE_URL. Populated with real repositories in T01.
+ * DATABASE_URL.
  */
 export const databasePath = (): string => process.env.DATABASE_URL ?? './data/dev.db';
 
 /**
- * Open a pooled SQLite connection with WAL enabled. Synchronous driver —
- * see plans/README.md ("Data model") for why that is the right call here.
+ * Open a SQLite connection with WAL enabled. The driver is synchronous —
+ * fine for this scale and it makes every repository function
+ * straightforward to test (see plans/README.md).
+ *
+ * The inferred return type carries `$client` (the raw better-sqlite3 handle).
  */
-export function createDatabase(path: string = databasePath()): Db {
+export function createDatabase(path: string = databasePath()) {
   if (path !== ':memory:') {
     mkdirSync(dirname(path), { recursive: true });
   }
