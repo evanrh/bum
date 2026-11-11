@@ -35,8 +35,13 @@ export async function getSettings(db: Db, now: number = Date.now()): Promise<Set
       createdAt: now,
       updatedAt: now,
     });
-  } catch {
-    // Losing a UNIQUE(id=1) race is fine — someone else bootstrapped.
+  } catch (error) {
+    // Losing the UNIQUE(id=1) race is fine — someone else bootstrapped.
+    // Any other failure is real and must not be silently swallowed.
+    if (!String(error).includes('settings_id_singleton') && !String(error).includes('UNIQUE')) {
+      console.error('[bum:db] settings bootstrap insert failed:', error);
+      throw error;
+    }
   }
   [row] = await db.select().from(settings).limit(1);
   if (!row) throw new Error('settings bootstrap failed');

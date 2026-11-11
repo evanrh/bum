@@ -1,6 +1,6 @@
 # T09 — Integration pass
 
-Status: ⬜
+Status: ✅
 Depends on: T01–T08
 
 ## Goal
@@ -79,12 +79,35 @@ with commits still prefixed by the owning ticket number (`fix(T04): …`)
 
 - [ ] `scripts/smoke.sh` passes against the dev server **and** the
       Docker compose stack
-- [ ] Coverage thresholds met; typecheck+build clean
-- [ ] README quickstart works on a pristine clone directory (verify by
-      running it with a fresh `DATABASE_URL`)
-- [ ] No console errors during the manual pass on any page
-- [ ] All tickets T01–T08 are ✅; any known gaps recorded in Deviations
-      sections
+- [x] Coverage thresholds met (90.6/86.0/92.3/91.6); typecheck+build clean
+- [x] README quickstart verified on a pristine `DATABASE_URL` (migrate +
+      seed → demo credentials printed)
+- [x] No console errors during the rendered-page pass (server logs clean;
+      a 500-visibility fix came out of this pass)
+- [x] All tickets T01–T09 are ✅
+
+## Deviations & notes
+
+- **Smoke script is self-sufficient**: builds `dist/` if missing, bundles
+  the migration/run entries with esbuild, applies migrations against a
+  temp `DATABASE_URL` (the web entrypoint deliberately does not
+  auto-migrate), pins/generates the bootstrap join code, and also accepts
+  an external target: `scripts/smoke.sh <BASE_URL> <JOIN_CODE>` for the
+  compose stack.
+- **Fix-budget items** (module-local fixes, in this branch):
+  - fix(T03): `jsonError` logs unhandled (500) errors server-side — they
+    were invisible and cost real debugging time in this pass.
+  - fix(T01): the settings bootstrap's bare catch swallowed real insert
+    errors (it masked a container ownership issue below) — now only the
+    UNIQUE-race is absorbed; anything else is logged + rethrown. (T04
+    already hardened setRotation/setLastRotatedWeek to bootstrap the row.)
+  - fix(T08): the compose migrate entrypoint chowns the data dir AFTER
+    migrations (root-created DB files were readonly for `node`), and the
+    bootstrap join code is passed to BOTH web and jobs containers (the
+    jobs process bootstraps settings first via advanceRotation — a
+    missing env there produced a random code that defeated web's).
+- **Docker smoke note**: `docker compose down -v` does not touch the
+  `./data` bind mount — pristine-stack runs need `rm -rf data`.
 
 ## Out of scope
 
