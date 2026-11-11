@@ -21,6 +21,13 @@ delegation protocol.
    **The agent opens PRs only — it never merges them.** Once the PR is
    open, the agent's work on that branch is done; merging is the owner's
    review call.
+   **Merge style — fast-forward only (owner-approved):** once the owner
+   approves, the agent may execute the merge mechanically: rebase the
+   branch onto an up-to-date `main` first if it has diverged (force-push
+   the branch; the PR tracks it automatically), then
+   `git checkout main && git merge --ff-only <branch> && git push`.
+   `main` therefore stays linear — no merge-bubble commits — and merged
+   branches are deleted.
 4. **One ticket per branch per agent run** (see "Delegation protocol"
    in `plans/README.md`). Dependent work stacks: branch off the branch
    you depend on and open the dependency PRs first — the owner merges

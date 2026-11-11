@@ -40,9 +40,11 @@ criteria checked).
    with its ticket number.
 5. When acceptance criteria are all met: update the ticket's `Status:` line
    and the index above (🚧 → ✅) **as part of the branch**, then open a PR
-   to `main` (see `AGENTS.md`) — agents open PRs, the owner merges them.
-   If work is genuinely blocked, leave 🚧 and
-   append a **Deviations & notes** section explaining the blocker.
+   to `main` (see `AGENTS.md`) — agents open PRs, the owner merges them,
+   and merges are fast-forward only (`main` stays linear).
+   If work is genuinely
+   blocked, leave 🚧 and append a **Deviations & notes** section explaining
+   the blocker.
 6. **Never rewrite a completed ticket's requirements.** Clarifications and
    discovered edge cases go into the ticket's *Deviations & notes* section
    so later tickets and reviewers can see the history.
