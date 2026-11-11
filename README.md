@@ -25,6 +25,31 @@ npm run build      # production build (outputs dist/)
 npm test           # unit tests
 npm run test:coverage
 npm run typecheck  # tsc --noEmit
+
+## Docker
+
+```sh
+docker compose build          # once (the image is shared by all services)
+docker compose up -d          # migrate (one-shot) → web :4321 + jobs
+docker compose ps             # migrate exited(0), web/jobs running
+docker compose logs -f web    # first run prints the join code once
+```
+
+- The database is a single SQLite file bind-mounted from `./data/bum.db`
+  (WAL mode handles the web + jobs concurrency).
+- Rotate the join code from the admin panel (`/admin`), or set
+  `BOOTSTRAP_JOIN_CODE` in `.env` before the first boot to pin it.
+- Backup: `docker compose stop` then copy `data/bum.db` (WAL: stop first),
+  or `sqlite3 data/bum.db ".backup data/backup.db"`.
+- Single-container alternative (web only, no scheduled jobs):
+
+  ```sh
+  docker run --init -v "$PWD/data:/data" \
+    -e DATABASE_URL=/data/bum.db -p 4321:4321 bum-web
+  ```
+
+- `.env.example` lists the environment knobs; values are wired in
+  `docker-compose.yml` by default.
 ```
 
 ## Project layout
