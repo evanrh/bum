@@ -1,6 +1,6 @@
 # T08 — Docker
 
-Status: ⬜
+Status: ✅
 Depends on: T01–T05 (T06/T07 recommended — the image should ship the full app)
 
 ## Goal
@@ -91,19 +91,39 @@ single-process case).
 
 No unit tests (infrastructure); acceptance is doing it:
 
-- [ ] `docker compose build` succeeds (also run
-      `docker compose run --rm migrate` standalone)
-- [ ] `docker compose up`: `migrate` exits 0; `web` serves the app on
-      `http://localhost:4321` (200 on `/`); `jobs` logs "jobs runner
-      ready" and stays alive
-- [ ] End-to-end through containers: signup via the env bootstrap/seeded
-      join code works; an album submitted via `curl` persists after
-      `docker compose down && docker compose up` (volume proof)
-- [ ] `docker compose ps` shows `migrate` exited(0), `web`/`jobs` running;
-      Ctrl-C on `docker compose up` (foreground) stops cleanly within a
-      few seconds (init/signal handling)
-- [ ] Image size sanity: no dev dependencies in the runtime layer
-      (`npm ls --omit=dev` in the image or `docker history` check)
+- [x] `docker compose build` succeeds; `docker compose run --rm migrate`
+      applies 2 migrations and exits (standalone verified)
+- [x] `docker compose up`: `migrate` exits 0; `web` serves 200 on `/` and
+      `/api/health {"ok":true}`; `jobs` logs "jobs runner ready (daily
+      00:15 America/New_York)" and stays alive
+- [x] End-to-end through containers: signup via the env-bootstrap join
+      code (201) → album submitted via `curl` (201) → after
+      `down && up`, login (200) and the album still lists (volume proof)
+- [x] `docker compose ps` shows `migrate` exited(0), `web`/`jobs`
+      running; foreground `docker compose up` stops cleanly on SIGINT
+      (exit 0, within seconds)
+- [x] Image sanity: `npm ls --omit=dev` inside the runtime image shows
+      zero dev dependencies (esbuild/vitest/typescript/@testing-library
+      all absent); compose builds ONE image tagged per service
+
+## Deviations & notes
+
+- **compose `command:` alone cannot re-task the image** — the Dockerfile
+  uses `ENTRYPOINT`, and compose `command:` only appends CMD args (the
+  "migrate" service was booting the web server). Per-service
+  `entrypoint:` overrides replace it (`migrate` also wraps with
+  `sh -c` to mkdir/chown the bind mount).
+- **The migrate service runs as root** (uid 0) to mkdir/chown
+  `./data` for the `node` user; `web`/`jobs` run as `USER node`.
+- **`GET /api/health` added** (returns `{ok: true}`, no auth, no DB
+  touch) and wired as the compose webhook-style healthcheck via busybox
+  `wget` (alpine has no curl).
+- **esbuild added as a dev dependency** (`^0.25`) for the two
+  server-entry bundles (`dist/jobs/{migrate,run}.mjs`,
+  `--packages=external`); the runtime image carries production deps only.
+- **`.env.example` uses the app's real env names** (`DATABASE_URL`,
+  `PORT`, `BOOTSTRAP_JOIN_CODE`) — the ticket's `DATABASE_PATH` naming
+  drifts from the app's variable.
 
 ## Out of scope
 

@@ -18,7 +18,7 @@ instead of repeating it.
 | T05 | [Jobs](T05-jobs.md) | T01, T02 | ✅ |
 | T06 | [Pages & islands](T06-pages-and-islands.md) | T01–T04 | ✅ |
 | T07 | [Admin panel](T07-admin-panel.md) | T01–T05 | ✅ |
-| T08 | [Docker](T08-docker.md) | T01–T05 | ⬜ |
+| T08 | [Docker](T08-docker.md) | T01–T05 | ✅ |
 | T09 | [Integration pass](T09-integration-pass.md) | T01–T08 | ⬜ |
 
 Status values: ⬜ not started · 🚧 in progress · ✅ done (all acceptance

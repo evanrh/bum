@@ -1,0 +1,37 @@
+services:
+  migrate:
+    build: .
+    # One-shot owner: prepares the bind-mounted data dir for the node user.
+    entrypoint: ["sh", "-c", "mkdir -p /data && chown -R node:node /data && node dist/jobs/migrate.mjs"]
+    environment: { DATABASE_URL: /data/bum.db }
+    volumes: ["./data:/data"]
+    user: "0:0"
+    restart: "no"
+  web:
+    build: .
+    environment:
+      DATABASE_URL: /data/bum.db
+      HOST: 0.0.0.0
+      PORT: "4321"
+    ports: ["4321:4321"]
+    volumes: ["./data:/data"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    init: true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:4321/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+  jobs:
+    build: .
+    entrypoint: ["node", "dist/jobs/run.mjs"]
+    environment:
+      DATABASE_URL: /data/bum.db
+      JOBS_CRON: "on"
+    volumes: ["./data:/data"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    init: true
