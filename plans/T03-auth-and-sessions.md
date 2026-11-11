@@ -1,6 +1,6 @@
 # T03 — Auth & sessions
 
-Status: ⬜
+Status: ✅
 Depends on: T01, T02
 
 ## Goal
@@ -106,13 +106,39 @@ them short and unstyled beyond `Base.astro`.
 
 ## Acceptance criteria
 
-- [ ] Built-in Astro sessions disabled (no "filesystem storage" log line in
-      `npm run dev` output)
-- [ ] All three endpoints work via `curl` with the cookie flow end to end
-- [ ] First-user-is-admin enforced; join code gates signup and is
+- [x] Built-in Astro sessions disabled — the "Enabling sessions with
+      filesystem storage" log line is gone from dev/build output
+- [x] All three endpoints work via `curl` with the cookie flow end to end
+      (signup 201 → login 200 → logout 204; logout without cookie 401;
+      cross-origin POST 403)
+- [x] First-user-is-admin enforced; join code gates signup and is
       rotatable via the settings repo (used by T07)
-- [ ] Origin check active on all `/api/*` mutations
-- [ ] Full permission matrix tested; `npm test` and test:coverage green
+- [x] Origin check active on all `/api/*` mutations
+- [x] Full permission matrix tested; `npm test` and test:coverage green
+      (114 tests; coverage 91.4/87.3/92.5/92 over the core)
+
+## Deviations & notes
+
+- **2026-11-11 — `session: false` does not exist in Astro 5.18.** The
+  node adapter force-enables a filesystem session store whenever no
+  driver is configured (`@astrojs/node`: `if (!session?.driver)`). The
+  supported disable is `session: { driver: 'memory' }` (an unstorage
+  in-process driver): nothing is persisted and no app code touches
+  `Astro.session`, so sessions are effectively off while the misleading
+  log line is gone.
+- **Astro's own origin-check middleware is also active** (on by default
+  for server output). It 403s raw-text POSTs to `/api/*` that lack a
+  same-origin `Origin` header — i.e. header-less curl to POST endpoints
+  must send a content-type (e.g. `application/json`) to pass Astro's
+  check; browsers and our no-JS forms always do. Our `checkOrigin`
+  middleware layers on top with the documented convention and JSON error
+  bodies.
+- **Handlers accept both JSON and `x-www-form-urlencoded` bodies** so the
+  no-JS HTML forms work: form posts get 303 redirects (home on success,
+  back to the page with `?error=` on failure), JSON clients get the
+  documented payload/`{ error }` responses.
+- Rate limiter keys are literal `ip` (signup) and `ip:username`
+  (lower-cased username) as per the ticket.
 
 ## Out of scope
 

@@ -36,3 +36,14 @@ export function createDatabase(path: string = databasePath()) {
 }
 
 export { schema };
+
+let appDb: Db | undefined;
+
+/**
+ * Lazily-created process-wide connection for the HTTP layer (middleware +
+ * endpoints). Repositories stay explicit-Db; tests inject their own.
+ */
+export function getDb(): Db {
+  appDb ??= createDatabase();
+  return appDb;
+}
