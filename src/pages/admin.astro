@@ -4,8 +4,6 @@ import { AdminJoinCode } from '../components/islands/AdminJoinCode.tsx';
 import { AdminRotation } from '../components/islands/AdminRotation.tsx';
 import { AdminSkip } from '../components/islands/AdminSkip.tsx';
 import { AdminUsers } from '../components/islands/AdminUsers.tsx';
-import { Match } from '../components/react/Match.tsx';
-import { Switch } from '../components/react/Switch.tsx';
 import { getDb } from '../db/index.ts';
 import * as auditRepo from '../db/repos/audit.ts';
 import * as albumsRepo from '../db/repos/albums.ts';
@@ -36,8 +34,18 @@ const audit = isAdmin ? await auditRepo.listRecentAudit(db, 50) : [];
 ---
 
 <Base title="Admin — Bum">
-  <Switch>
-    <Match when={isAdmin && settings && summary}>
+  {
+    /* Astro-template conditionals must be lazy ternaries (see Conventions):
+       <Switch>/<Match> arms render here as eager slot strings that <Switch>
+       drops entirely — the whole page came out blank. */
+    !isAdmin ? (
+    <section class="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+      <h1 class="text-lg font-medium text-zinc-100">No access</h1>
+      <p class="mt-2 text-sm text-zinc-400">this page is for club admins only.</p>
+      <a href="/" class="mt-4 inline-block text-sm text-amber-400 underline">back to the dashboard</a>
+    </section>
+  ) : (
+    <>
       <h1 class="mb-5 text-xl font-semibold text-zinc-100">Admin</h1>
 
       <section class="mb-6" aria-label="users">
@@ -86,13 +94,6 @@ const audit = isAdmin ? await auditRepo.listRecentAudit(db, 50) : [];
           {audit.length === 0 && <li class="px-4 py-3 text-sm text-zinc-500">no audit entries yet.</li>}
         </ul>
       </section>
-    </Match>
-    <Match when={!isAdmin}>
-      <section class="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
-        <h1 class="text-lg font-medium text-zinc-100">No access</h1>
-        <p class="mt-2 text-sm text-zinc-400">this page is for club admins only.</p>
-        <a href="/" class="mt-4 inline-block text-sm text-amber-400 underline">back to the dashboard</a>
-      </section>
-    </Match>
-  </Switch>
+    </>
+  )}
 </Base>
