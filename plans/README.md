@@ -16,7 +16,7 @@ instead of repeating it.
 | T03 | [Auth & sessions](T03-auth-and-sessions.md) | T01, T02 | ✅ |
 | T04 | [Albums & ratings](T04-albums-and-ratings.md) | T01, T02, T03 | ✅ |
 | T05 | [Jobs](T05-jobs.md) | T01, T02 | ✅ |
-| T06 | [Pages & islands](T06-pages-and-islands.md) | T01–T04 | ⬜ |
+| T06 | [Pages & islands](T06-pages-and-islands.md) | T01–T04 | ✅ |
 | T07 | [Admin panel](T07-admin-panel.md) | T01–T05 | ⬜ |
 | T08 | [Docker](T08-docker.md) | T01–T05 | ⬜ |
 | T09 | [Integration pass](T09-integration-pass.md) | T01–T08 | ⬜ |
@@ -214,13 +214,18 @@ always Mondays.
   errors as `{ error: string }` with the right status (400 validation, 401
   unauthenticated, 403 forbidden, 404 missing, 409 conflict, 429 rate
   limited).
-- **Conditional rendering uses `<Show>` / `<Switch><Match>` helpers**
-  (owned convention, 2026-11-11) instead of `&&`/ternary short-circuits:
-  `src/components/react/{Show,Switch,Match}.tsx` work in React islands and
-  server-rendered inside `.astro` templates alike. `<Show>` maps to an `if`;
-  `<Switch>/<Match>` maps to a `switch` (first truthy arm wins — keep arms
-  exclusive and in priority order). No bare short-circuit component
-  rendering. Optional `fallback` slot/prop for the negative case.
+- **Conditional rendering uses `<Show>` / `<Switch><Match>` helpers + lazy
+  astro ternaries (owner convention, 2026-11-11) — never bare `{cond && <…/>}`
+  chains.** Split by surface: **React islands** use
+  `src/components/react/{Show,Switch,Match}.tsx` — children are genuinely
+  lazy (`<Show>` ≙ if, `<Switch>/<Match>` ≙ switch, first truthy arm wins).
+  **`.astro` templates**: @astrojs/react renders astro-template children of
+  framework components as EAGER slot strings — every helper arm evaluates
+  before the winner is picked, so helpers there may not guard undefined
+  data and `client:*` islands don't hydrate inside them. In astro
+  templates: put islands and data guards in lazy TERNARIES (`cond ? … : …`
+  ≙ if, fully deferred) and reserve `<Show>` for always-evaluable children
+  (e.g. `album.note`).
 - Timestamps: `Date.now()` ms; dates: ISO `YYYY-MM-DD` strings.
 - Tests live in `test/` mirroring the source tree. DB tests open a fresh
   `:memory:` database (or temp file when WAL semantics matter), run

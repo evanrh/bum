@@ -1,0 +1,39 @@
+---
+import StarDisplay from './StarDisplay.astro';
+
+interface Props {
+  id: string;
+  title: string;
+  artist: string;
+  coverUrl?: string | null;
+  submitterName: string;
+  weekStart: string;
+  avgScore: number | null;
+  ratingCount: number;
+}
+
+const { id, title, artist, coverUrl, submitterName, weekStart, avgScore, ratingCount } = Astro.props;
+---
+
+<a
+  href={`/albums/${id}`}
+  class="album-card block overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 transition-colors hover:border-zinc-600"
+>
+  {
+    coverUrl ? (
+      <img src={coverUrl} alt={`cover of ${title}`} loading="lazy" class="aspect-square w-full object-cover" />
+    ) : (
+      <div class="album-card-fallback aspect-square w-full bg-gradient-to-br from-zinc-800 via-zinc-800 to-zinc-900" aria-hidden="true" />
+    )
+  }
+  <div class="p-4">
+    <h3 class="font-medium text-zinc-100">{title}</h3>
+    <p class="text-sm text-zinc-400">{artist}</p>
+    <p class="mt-1 text-xs text-zinc-500">week of {weekStart} — {submitterName}</p>
+    <div class="mt-2 flex items-center gap-2">
+      <StarDisplay score10={avgScore} size="text-sm" />
+      <span class="text-xs text-zinc-400">{avgScore !== null ? avgScore : '—'}</span>
+      <span class="text-xs text-zinc-500">({ratingCount})</span>
+    </div>
+  </div>
+</a>

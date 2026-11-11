@@ -1,35 +1,33 @@
 ---
 import Base from '../layouts/Base.astro';
-import { Show } from '../components/react/Show.tsx';
-
-const error = Astro.url.searchParams.get('error');
+import { SignupForm } from '../components/islands/SignupForm.tsx';
 ---
 
 <Base title="Sign up — Bum">
-  <Show when={error}>
-    <p class="rounded border border-red-500/50 bg-red-500/10 px-4 py-2 text-sm text-red-300" role="alert">
-      {error}
-    </p>
-  </Show>
-  <form method="post" action="/api/signup" class="mt-6 flex max-w-sm flex-col gap-4">
-    <label class="text-sm text-zinc-300">
-      join code
-      <input name="join_code" required autocomplete="off" class="mt-1 block w-full rounded bg-zinc-900 px-3 py-2 text-zinc-100" />
-    </label>
-    <label class="text-sm text-zinc-300">
-      username
-      <input name="username" required autocomplete="username" class="mt-1 block w-full rounded bg-zinc-900 px-3 py-2 text-zinc-100" />
-    </label>
-    <label class="text-sm text-zinc-300">
-      display name
-      <input name="display_name" required autocomplete="nickname" class="mt-1 block w-full rounded bg-zinc-900 px-3 py-2 text-zinc-100" />
-    </label>
-    <label class="text-sm text-zinc-300">
-      password
-      <input type="password" name="password" required autocomplete="new-password" class="mt-1 block w-full rounded bg-zinc-900 px-3 py-2 text-zinc-100" />
-    </label>
-    <button class="rounded bg-zinc-100 px-3 py-2 font-medium text-zinc-900 hover:bg-white">sign up</button>
-  </form>
+  <h1 class="mb-4 text-lg font-semibold text-zinc-100">Sign up</h1>
+  <SignupForm client:load />
+  <noscript>
+    <form method="post" action="/api/signup" class="mt-6 flex max-w-sm flex-col gap-4">
+      <label class="text-sm text-zinc-300">
+        join code
+        <input name="join_code" required autocomplete="off" class="mt-1 block w-full rounded bg-zinc-900 px-3 py-2 text-zinc-100" />
+        <span class="mt-1 block text-xs text-zinc-500">ask an admin for the club code</span>
+      </label>
+      <label class="text-sm text-zinc-300">
+        username
+        <input name="username" required autocomplete="username" class="mt-1 block w-full rounded bg-zinc-900 px-3 py-2 text-zinc-100" />
+      </label>
+      <label class="text-sm text-zinc-300">
+        display name
+        <input name="display_name" required autocomplete="nickname" class="mt-1 block w-full rounded bg-zinc-900 px-3 py-2 text-zinc-100" />
+      </label>
+      <label class="text-sm text-zinc-300">
+        password
+        <input type="password" name="password" required autocomplete="new-password" class="mt-1 block w-full rounded bg-zinc-900 px-3 py-2 text-zinc-100" />
+      </label>
+      <button class="rounded bg-zinc-100 px-3 py-2 font-medium text-zinc-900" type="submit">sign up</button>
+    </form>
+  </noscript>
   <p class="mt-4 text-sm text-zinc-400">
     member already? <a href="/login" class="underline hover:text-zinc-200">log in</a>
   </p>

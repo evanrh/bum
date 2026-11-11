@@ -1,4 +1,4 @@
-import { asc, eq, sql } from 'drizzle-orm';
+import { asc, eq, inArray, sql } from 'drizzle-orm';
 
 import { users, type User } from '../schema.ts';
 import type { Db } from '../index.ts';
@@ -60,6 +60,16 @@ export async function listActiveUsers(db: Db): Promise<User[]> {
 
 export async function listAllUsers(db: Db): Promise<User[]> {
   return db.select().from(users).orderBy(asc(users.joinedAt), asc(users.id));
+}
+
+/** Batch lookup for page rendering (submitter names on album lists). */
+export async function getUsersByIds(db: Db, ids: number[]): Promise<User[]> {
+  if (ids.length === 0) return [];
+  return db
+    .select()
+    .from(users)
+    .where(inArray(users.id, ids))
+    .orderBy(asc(users.joinedAt), asc(users.id));
 }
 
 export async function setUserAdmin(db: Db, id: number, isAdmin: boolean): Promise<User> {

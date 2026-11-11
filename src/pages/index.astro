@@ -1,24 +1,188 @@
 ---
 import Base from '../layouts/Base.astro';
+import AlbumEmbed from '../components/AlbumEmbed.astro';
+import StarDisplay from '../components/StarDisplay.astro';
+import Countdown, { remainingText } from '../components/islands/Countdown.tsx';
+import { Show } from '../components/react/Show.tsx';
+import { getDb } from '../db/index.ts';
+import * as albumsRepo from '../db/repos/albums.ts';
+import * as usersRepo from '../db/repos/users.ts';
+import { leaderboard, recentActivity, relativeTime, turnSummary } from '../lib/dashboard.ts';
+
+const db = getDb();
+const user = Astro.locals.user;
+const now = Date.now();
+
+const summary = await turnSummary(db, now);
+const weekAlbum = await albumsRepo.getAlbumByWeekStart(db, summary.week);
+const weekSubmitter = weekAlbum ? await usersRepo.getUserById(db, weekAlbum.submittedBy) : undefined;
+const fallbackAlbum =
+  weekAlbum ?? (await albumsRepo.listAlbums(db, { sort: 'newest', limit: 1 })).items[0] ?? undefined;
+const featured = weekAlbum ?? fallbackAlbum;
+const featuredStats = featured
+  ? (await albumsRepo.statsForAlbums(db, [featured.id]))[featured.id]
+  : undefined;
+const featuredSubmitter = featured ? await usersRepo.getUserById(db, featured.submittedBy) : undefined;
+
+const featuredAvg = featuredStats?.avgScore ?? null;
+const avgHalfStars = featuredAvg === null ? null : Math.round(featuredAvg * 2) / 2;
+const artistLine = featured ? `${featured.artist}${featured.year ? ` (${featured.year})` : ''}` : '';
+
+const deadlineText = remainingText(summary.endsAtIso, now);
+const pickerIsYou = user !== null && user.isActive && summary.pickerId === user.id;
+const submittedBanner = Boolean(summary.submitted && weekAlbum);
+
+const activity = await recentActivity(db, 20);
+const board = await leaderboard(db, 5);
 ---
 
-<Base title="Bum">
-  <section class="rounded-xl border border-zinc-800 bg-zinc-900 p-8">
-    <h1 class="text-2xl font-semibold tracking-tight">Welcome to Bum</h1>
-    <p class="mt-2 text-zinc-400">
-      A weekly album review club. Scaffolding only &mdash; the app is built feature by feature
-      from the tickets in <code class="text-zinc-200">plans/</code>.
-    </p>
-    <ul class="mt-4 list-inside list-disc text-sm text-zinc-500">
-      <li>T01: database foundation</li>
-      <li>T02: rotation engine</li>
-      <li>T03: auth &amp; sessions</li>
-      <li>T04: albums &amp; ratings</li>
-      <li>T05: jobs</li>
-      <li>T06: pages &amp; islands</li>
-      <li>T07: admin panel</li>
-      <li>T08: docker</li>
-      <li>T09: integration pass</li>
-    </ul>
+<Base title="Bum — album review club">
+  <section class="mb-6" aria-label="this week's turn">
+    {
+      /* Astro-template conditionals over possibly-undefined data must be
+         lazy: ternaries defer properly, while React-helper children in .astro
+         templates are eagerly rendered slot strings (see Conventions). */
+         summary.submitted && weekAlbum ? (
+      <div class="weekly-banner rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+        <h1 class="text-lg font-medium text-zinc-100">Week of {summary.week}</h1>
+        <Show when={weekSubmitter}>
+          <p class="mt-1 text-sm text-zinc-400">
+            submitted by {weekSubmitter!.displayName} on{' '}
+            {new Date(weekAlbum!.submittedAt).toISOString().slice(0, 10)}
+          </p>
+        </Show>
+        <a class="mt-2 inline-block text-sm text-amber-400 underline" href={`/albums/${weekAlbum!.id}`}>
+          view the album →
+        </a>
+      </div>
+         ) : (
+      <div
+        class:list={[
+          'weekly-banner rounded-xl border p-5',
+          pickerIsYou ? 'border-amber-500/60 bg-amber-500/10' : 'border-zinc-800 bg-zinc-900',
+        ]}
+      >
+        {
+          summary.pickerName ? (
+            <>
+              <h1 class="text-lg font-medium text-zinc-100">
+                Week of {summary.week} — <span class="font-semibold">{summary.pickerName}</span>'s turn to pick
+              </h1>
+              <p class="mt-1 text-sm text-zinc-400">
+                deadline <Countdown client:visible deadlineIso={summary.endsAtIso} fallback={deadlineText} />
+              </p>
+              <Show when={pickerIsYou}>
+                <a
+                  href="/submit"
+                  class="mt-3 inline-block rounded bg-amber-400 px-4 py-2 font-medium text-zinc-950 hover:bg-amber-300"
+                >
+                  submit your pick
+                </a>
+              </Show>
+            </>
+          ) : (
+            <p class="text-zinc-400">no rotation defined yet — ask an admin to set it up</p>
+          )
+        }
+      </div>
+         )
+    }
+  </section>
+
+  {
+    featured && featuredStats && featuredSubmitter ? (
+      <section class="mb-8" aria-label="featured album">
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+          <AlbumEmbed spotifyId={featured.spotifyId} youtubeId={featured.youtubeId} title={featured.title} />
+          <div class="mt-4">
+            <h2 class="text-xl font-semibold text-zinc-100">
+              <a href={`/albums/${featured.id}`} class="hover:underline">{featured.title}</a>
+            </h2>
+            <p class="text-zinc-400">{artistLine}</p>
+            <p class="mt-1 text-sm text-zinc-500">picked by {featuredSubmitter.displayName}</p>
+            <Show when={featured.note}>
+              <p class="mt-3 rounded bg-zinc-950 px-4 py-3 text-sm italic text-zinc-300">“{featured.note}”</p>
+            </Show>
+            <div class="mt-3 flex items-center gap-2">
+              <StarDisplay score10={avgHalfStars} />
+              <span class="text-sm text-zinc-300">{featuredAvg ?? '—'}</span>
+              <span class="text-xs text-zinc-500">({featuredStats.ratingCount} ratings)</span>
+            </div>
+          </div>
+          <div class="mt-4">
+            {
+              user === null ? (
+                <p class="text-sm text-zinc-500">log in to rate — <a class="underline" href="/login">log in</a></p>
+              ) : myRating ? (
+                <p class="text-sm text-amber-400">
+                  your score: {myRating.score / 2}★
+                  <a class="ml-1 underline" href={`/albums/${featured.id}`}>edit on the album page</a>
+                </p>
+              ) : (
+                <RatingWidget client:visible albumId={featured.id} />
+              )
+            }
+          </div>
+        </div>
+      </section>
+    ) : (
+      <section class="mb-8" aria-label="featured album">
+        <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+          <p class="text-zinc-400">nothing submitted yet — the club's first week awaits its first pick.</p>
+        </div>
+      </section>
+    )
+  }
+
+  <section class="mb-8" aria-label="recent activity">
+    <h2 class="mb-3 text-sm font-semibold tracking-wide text-zinc-500 uppercase">recent activity</h2>
+    {
+      activity.length > 0 ? (
+        <ul class="divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900">
+          {
+            activity.map((row) => (
+              <li class="flex items-center justify-between px-4 py-2.5 text-sm">
+                <span class="text-zinc-300">
+                  <span class="text-zinc-500">{row.kind === 'submission' ? 'picked' : `rated ${row.score / 2}★`}</span>{' '}
+                  <a class="hover:underline" href={`/albums/${row.albumId}`}>{row.albumTitle}</a>
+                  <span class="text-zinc-500"> — {row.actorName}</span>
+                </span>
+                <span class="text-xs text-zinc-600">{relativeTime(row.at, now)}</span>
+              </li>
+            ))
+          }
+        </ul>
+      ) : (
+        <p class="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm text-zinc-500">no activity yet</p>
+      )
+    }
+  </section>
+
+  <section class="mb-8" aria-label="top rated">
+    <div class="mb-3 flex items-baseline justify-between">
+      <h2 class="text-sm font-semibold tracking-wide text-zinc-500 uppercase">top rated</h2>
+      <a class="text-xs text-zinc-500 underline" href="/albums">full list →</a>
+    </div>
+    {
+      board.length > 0 ? (
+        <ol class="space-y-2">
+          {
+            board.map((row, index) => (
+              <li class="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2.5">
+                <span class="w-4 text-sm text-zinc-600">{index + 1}</span>
+                <a class="flex-1 text-sm text-zinc-200 hover:underline" href={`/albums/${row.id}`}>
+                  {row.title} <span class="text-zinc-500">— {row.artist}</span>
+                </a>
+                <StarDisplay score10={Math.round(row.avgScore * 2) / 2} size="text-sm" />
+                <span class="text-xs text-zinc-400">{row.avgScore}</span>
+                <span class="text-xs text-zinc-600">({row.ratingCount})</span>
+              </li>
+            ))
+          }
+        </ol>
+      ) : (
+        <p class="text-sm text-zinc-500">no ratings yet — the leaderboard fills in as members score.</p>
+      )
+    }
   </section>
 </Base>

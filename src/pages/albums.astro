@@ -1,0 +1,96 @@
+---
+import Base from '../layouts/Base.astro';
+import AlbumCard from '../components/AlbumCard.astro';
+import { AlbumFilters } from '../components/islands/AlbumFilters.tsx';
+import { getDb } from '../db/index.ts';
+import * as albumsRepo from '../db/repos/albums.ts';
+import * as usersRepo from '../db/repos/users.ts';
+import { or400 } from '../lib/validate.ts';
+import { z } from 'zod';
+
+const PAGE_SIZE = 50;
+const db = getDb();
+
+const querySchema = z.object({
+  by: z.coerce.number().int().positive().optional(),
+  sort: z.enum(['newest', 'avg']).optional(),
+  page: z.coerce.number().int().min(1).optional(),
+});
+const query = or400(querySchema, Object.fromEntries(Astro.url.searchParams));
+const sort = query.sort ?? 'newest';
+const page = query.page ?? 1;
+
+const list = await albumsRepo.listAlbums(db, {
+  submitterId: query.by,
+  sort,
+  limit: PAGE_SIZE,
+  offset: (page - 1) * PAGE_SIZE,
+});
+const submitters = await usersRepo.getUsersByIds(db, [...new Set(list.items.map((a) => a.submittedBy))]);
+const nameById = new Map(submitters.map((u) => [u.id, u.displayName]));
+const members = await usersRepo.listActiveUsers(db);
+const totalPages = Math.max(1, Math.ceil(list.total / PAGE_SIZE));
+const prevHref = page > 1 ? withQuery(page - 1) : undefined;
+const nextHref = page < totalPages ? withQuery(page + 1) : undefined;
+
+function withQuery(targetPage: number): string {
+  const params = new URLSearchParams();
+  if (query.by !== undefined) params.set('by', String(query.by));
+  if (sort !== 'newest') params.set('sort', sort);
+  if (targetPage > 1) params.set('page', String(targetPage));
+  const qs = params.toString();
+  return qs === '' ? '/albums' : `/albums?${qs}`;
+}
+---
+
+<Base title={`Albums — Bum (page ${page})`}>
+  <section class="mb-8" aria-label="album list">
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <h1 class="text-lg font-semibold text-zinc-100">Every pick ({list.total})</h1>
+      <AlbumFilters
+        client:visible
+        submitters={members.map((member) => ({ id: member.id, name: member.displayName }))}
+        sort={sort}
+        by={query.by}
+      />
+    </div>
+    <div class="grid grid-cols-2 gap-4 sm:grid-cols-3">
+      {
+        list.items.map((album) => (
+          <AlbumCard
+            id={album.id}
+            title={album.title}
+            artist={album.artist}
+            coverUrl={album.coverUrl}
+            submitterName={nameById.get(album.submittedBy) ?? 'unknown'}
+            weekStart={album.weekStart}
+            avgScore={album.avgScore}
+            ratingCount={album.ratingCount}
+          />
+        ))
+      }
+      {list.items.length === 0 && (
+        <p class="col-span-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-6 text-sm text-zinc-500">
+          nothing here yet.
+        </p>
+      )}
+    </div>
+    {
+      totalPages > 1 && (
+        <nav class="mt-5 flex items-center justify-between text-sm" aria-label="pagination">
+          {prevHref ? (
+            <a class="text-zinc-300 underline" href={prevHref}>← newer</a>
+          ) : (
+            <span />
+          )}
+          <span class="text-xs text-zinc-500">page {page} of {totalPages}</span>
+          {nextHref ? (
+            <a class="text-zinc-300 underline" href={nextHref}>older →</a>
+          ) : (
+            <span />
+          )}
+        </nav>
+      )
+    }
+  </section>
+</Base>
