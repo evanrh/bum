@@ -1,0 +1,98 @@
+---
+import Base from '../layouts/Base.astro';
+import { AdminJoinCode } from '../components/islands/AdminJoinCode.tsx';
+import { AdminRotation } from '../components/islands/AdminRotation.tsx';
+import { AdminSkip } from '../components/islands/AdminSkip.tsx';
+import { AdminUsers } from '../components/islands/AdminUsers.tsx';
+import { Match } from '../components/react/Match.tsx';
+import { Switch } from '../components/react/Switch.tsx';
+import { getDb } from '../db/index.ts';
+import * as auditRepo from '../db/repos/audit.ts';
+import * as albumsRepo from '../db/repos/albums.ts';
+import * as settingsRepo from '../db/repos/settings.ts';
+import * as usersRepo from '../db/repos/users.ts';
+import { relativeTime, turnSummary } from '../lib/dashboard.ts';
+import { buildRoster } from '../lib/api/admin.ts';
+
+const user = Astro.locals.user;
+const db = getDb();
+const now = Date.now();
+
+// Page-level guard: anonymous → login, non-admin → a 404-style page.
+if (user === null) return Astro.redirect('/login');
+const isAdmin = user.isActive && user.isAdmin;
+if (!isAdmin) Astro.response.status = 404;
+
+const roster = isAdmin ? await buildRoster(db) : [];
+const users = isAdmin ? await usersRepo.listAllUsers(db) : [];
+const queue = isAdmin ? await settingsRepo.getRotation(db) : [];
+const namesById = new Map(users.map((candidate) => [candidate.id, candidate.displayName]));
+const settings = isAdmin ? await settingsRepo.getSettings(db, now) : undefined;
+const summary = isAdmin ? await turnSummary(db, now) : undefined;
+const weekAlbum = summary ? await albumsRepo.getAlbumByWeekStart(db, summary.week) : undefined;
+const nextPickerName =
+  queue[1] !== undefined ? namesById.get(queue[1]) ?? 'the next member' : 'nobody';
+const audit = isAdmin ? await auditRepo.listRecentAudit(db, 50) : [];
+---
+
+<Base title="Admin — Bum">
+  <Switch>
+    <Match when={isAdmin && settings && summary}>
+      <h1 class="mb-5 text-xl font-semibold text-zinc-100">Admin</h1>
+
+      <section class="mb-6" aria-label="users">
+        <h2 class="mb-3 text-sm font-semibold tracking-wide text-zinc-500 uppercase">members</h2>
+        <AdminUsers client:load users={roster.map((entry) => ({ ...entry, username: entry.username, submissionCount: entry.submissionCount, ratingCount: entry.ratingCount, queuePosition: entry.queuePosition }))} />
+      </section>
+
+      <section class="mb-6" aria-label="rotation">
+        <h2 class="mb-3 text-sm font-semibold tracking-wide text-zinc-500 uppercase">rotation order</h2>
+        <AdminRotation
+          client:visible
+          queue={queue.map((memberId) => ({ id: memberId, name: namesById.get(memberId) ?? `#${memberId}` }))}
+        />
+      </section>
+
+      <section class="mb-6" aria-label="weekly controls">
+        <h2 class="mb-3 text-sm font-semibold tracking-wide text-zinc-500 uppercase">weekly controls</h2>
+        <AdminSkip
+          client:visible
+          week={summary!.week}
+          pickerName={namesById.get(summary!.pickerId ?? -1) ?? 'nobody'}
+          nextPickerName={nextPickerName}
+          hasAlbum={Boolean(weekAlbum)}
+        />
+      </section>
+
+      <section class="mb-6" aria-label="join code">
+        <h2 class="mb-3 text-sm font-semibold tracking-wide text-zinc-500 uppercase">join code & signups</h2>
+        <AdminJoinCode client:visible joiningEnabled={settings!.joiningEnabled} />
+      </section>
+
+      <section aria-label="audit log">
+        <h2 class="mb-3 text-sm font-semibold tracking-wide text-zinc-500 uppercase">audit log</h2>
+        <ul class="divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900">
+          {
+            audit.map((entry) => (
+              <li class="flex items-center justify-between gap-4 px-4 py-2.5 text-sm">
+                <span class="text-zinc-300">
+                  <span class="text-zinc-500">{entry.actorUsername ?? 'system'}</span> {entry.action}
+                  <span class="text-zinc-400"> — {entry.detail}</span>
+                </span>
+                <span class="text-xs text-zinc-600">{relativeTime(entry.createdAt, now)}</span>
+              </li>
+            ))
+          }
+          {audit.length === 0 && <li class="px-4 py-3 text-sm text-zinc-500">no audit entries yet.</li>}
+        </ul>
+      </section>
+    </Match>
+    <Match when={!isAdmin}>
+      <section class="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+        <h1 class="text-lg font-medium text-zinc-100">No access</h1>
+        <p class="mt-2 text-sm text-zinc-400">this page is for club admins only.</p>
+        <a href="/" class="mt-4 inline-block text-sm text-amber-400 underline">back to the dashboard</a>
+      </section>
+    </Match>
+  </Switch>
+</Base>
