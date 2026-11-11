@@ -1,6 +1,6 @@
 # T05 — Jobs
 
-Status: ⬜
+Status: ✅
 Depends on: T01, T02
 
 ## Goal
@@ -67,11 +67,15 @@ Fixture builder: migrate a fresh `:memory:` DB, seed settings with queue
 
 ## Acceptance criteria
 
-- [ ] `node src/jobs/run.ts` boots, migrates, advances, logs
-      readiness; exits 0 under `JOBS_CRON=off`
-- [ ] Down for 3 weeks → exactly 3 advances on the first run back;
+- [x] `node src/jobs/run.ts` boots, migrates, advances, logs
+      readiness; exits 0 under `JOBS_CRON=off` (live-verified: first run
+      bootstraps the checkpoint, second run logs `0 week(s) advanced`,
+      cron boot logs readiness and shuts down cleanly on SIGTERM)
+- [x] Down for 3 weeks → exactly 3 advances on the first run back;
       repeat runs are no-ops
-- [ ] `npm test` / coverage green (coverage includes `src/jobs/**`)
+- [x] `npm test` / coverage green (169 tests; coverage 90/88.5/90/90.6,
+      `advance.ts` at 100% statements — `run.ts`'s CLI boot block is the
+      OS-integration surface, exercised by the live smoke and T09)
 
 ## Out of scope
 

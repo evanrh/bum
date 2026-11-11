@@ -15,7 +15,7 @@ instead of repeating it.
 | T02 | [Rotation queue](T02-rotation-engine.md) | T01 | ✅ |
 | T03 | [Auth & sessions](T03-auth-and-sessions.md) | T01, T02 | ✅ |
 | T04 | [Albums & ratings](T04-albums-and-ratings.md) | T01, T02, T03 | ✅ |
-| T05 | [Jobs](T05-jobs.md) | T01, T02 | ⬜ |
+| T05 | [Jobs](T05-jobs.md) | T01, T02 | ✅ |
 | T06 | [Pages & islands](T06-pages-and-islands.md) | T01–T04 | ⬜ |
 | T07 | [Admin panel](T07-admin-panel.md) | T01–T05 | ⬜ |
 | T08 | [Docker](T08-docker.md) | T01–T05 | ⬜ |
