@@ -1,6 +1,6 @@
 # T07 — Admin panel
 
-Status: ⬜
+Status: ✅
 Depends on: T01–T05
 
 ## Goal
@@ -78,8 +78,7 @@ get 404-style "no access" page, not a naked 403 JSON).
   - users: promote/demote/activate/deactivate round trips; demoting the
     last admin → 409; reset_password sets a hash that verifies; counts
     in GET are right
-  - rotation: order update with a wrong id set → 400; epoch normalization
-    (Wednesday epoch → Monday); bad timezone → 400; settings change is
+  - rotation: order update with a wrong id set → 400; settings change is
     visible to `currentTurn` immediately
   - **skip semantics** (the critical block): seed 3 members; admin skip
     in week 0 → head moves to the back, new picker = member 2, one
@@ -96,14 +95,35 @@ get 404-style "no access" page, not a naked 403 JSON).
 
 ## Acceptance criteria
 
-- [ ] Admin journey by hand: rotate join code → (new member signs up,
-      appended to the queue) → reorder → skip current picker → new
-      picker sees the shift → skip again rotates further; audit rows
-      visible
-- [ ] Last-admin protection enforced; deactivated member cannot log in
-      (T03) and their turn is passed over via the member-list change
-- [ ] Non-admins receive 403/404 everywhere on admin surface
-- [ ] `npm test` / coverage green
+- [x] Admin journey verified live: rotate join code (old code → 401) →
+      new member signs up → reordered → skip current picker (moved ✓,
+      audit row) → skip again rotates further → audit rows visible via
+      GET /api/admin/audit and the /admin page
+- [x] Last-admin protection enforced (409); deactivated member loses
+      login sessions immediately (dropUser) and is removed from the
+      rotation queue; reactivation appends at the back
+- [x] Non-admins receive 403 on `/api/admin/*` and the 404-style "no
+      access" page on `/admin`
+- [x] `npm test` / coverage green (215 tests; 91/86.7/92.3/92)
+
+## Deviations & notes
+
+- **Join-code rotation date is not shown** ("set, rotated {date}"): the
+  schema has no rotation timestamp column, and `settings.updated_at`
+  reflects unrelated changes too — the island states that the code is
+  set and offers rotation without a fake date.
+- **Stale test bullets removed**: the pre-redesign "epoch normalization /
+  bad timezone" test lines were leftovers (the schedule settings are
+  fixed) — the rotation-settings coverage now matches the endpoint (group
+  name only).
+- **Admin UI actions post with `content-type: application/json`** —
+  header-less POSTs to `/api/*` are rejected by Astro's built-in origin
+  check (documented in T03); browsers always send same-origin + content
+  type, so this only affects curl usage.
+- Album admin-deletion endpoint added here per ticket: `POST
+  /api/albums/{id}/delete` (form posts redirect to /albums; JSON → 204;
+  ratings cascade; audited as `album.delete`); the album detail page
+  exposes an admin-only delete form.
 
 ## Out of scope
 
