@@ -161,14 +161,20 @@ export async function listAlbums(
 
 export type AlbumStats = { avgScore: number | null; ratingCount: number };
 
-/** Aggregate stats for a specific set of album ids (leaderboards). */
+/**
+ * Aggregate stats for specific album ids (leaderboards, page headers).
+ * Every id that exists in `albums` gets an entry — unrated albums come
+ * back as `{ avgScore: null, ratingCount: 0 }` (page guards must not
+ * mistake "no ratings yet" for "missing album"); unknown ids stay absent.
+ */
 export async function statsForAlbums(db: Db, albumIds: string[]): Promise<Record<string, AlbumStats>> {
   if (albumIds.length === 0) return {};
   const rows = (await db
-    .select({ albumId: ratings.albumId, avgScore: avgExpr, ratingCount: cntExpr })
-    .from(ratings)
-    .where(inArray(ratings.albumId, albumIds))
-    .groupBy(ratings.albumId)) as Array<{
+    .select({ albumId: albums.id, avgScore: avgExpr, ratingCount: cntExpr })
+    .from(albums)
+    .leftJoin(ratings, eq(ratings.albumId, albums.id))
+    .where(inArray(albums.id, albumIds))
+    .groupBy(albums.id)) as Array<{
     albumId: string;
     avgScore: string | number | null;
     ratingCount: string | number;
