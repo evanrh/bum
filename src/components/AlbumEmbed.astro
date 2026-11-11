@@ -1,0 +1,41 @@
+---
+import { spotifyEmbedUrl, youtubeEmbedUrl } from '../lib/external.ts';
+
+interface Props {
+  spotifyId?: string | null;
+  youtubeId?: string | null;
+  title: string;
+}
+
+const { spotifyId, youtubeId, title } = Astro.props;
+---
+
+{
+  spotifyId && (
+    <iframe
+      src={spotifyEmbedUrl(spotifyId)}
+      class="w-full"
+      height="152"
+      loading="lazy"
+      title={`${title} — Spotify`}
+      allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+    />
+  )
+}
+{
+  youtubeId && (
+    <div class="aspect-video">
+      <iframe
+        src={youtubeEmbedUrl(youtubeId)}
+        class="h-full w-full"
+        loading="lazy"
+        title={`${title} — YouTube`}
+        allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"
+        allowfullscreen
+      />
+    </div>
+  )
+}
+{!spotifyId && !youtubeId && (
+  <div class="rounded bg-zinc-900 px-6 py-8 text-center text-sm text-zinc-500">no preview available</div>
+)}

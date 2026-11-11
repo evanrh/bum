@@ -16,6 +16,8 @@ import {
 } from '../auth.ts';
 import { ApiError, jsonError } from '../errors.ts';
 import { sessionStore } from '../sessions.ts';
+import { or400 } from '../validate.ts';
+import { isFormPost, readBody, redirect } from './http.ts';
 import type { User } from '../../db/schema.ts';
 
 /**
@@ -50,33 +52,6 @@ const loginSchema = z.object({
 
 type RateLimitOpts = { rateLimiter?: RateLimiter };
 
-const isFormPost = (request: Request): boolean =>
-  (request.headers.get('content-type') ?? '').includes('application/x-www-form-urlencoded');
-
-async function readBody(request: Request): Promise<Record<string, unknown>> {
-  try {
-    if (isFormPost(request)) {
-      const form = await request.formData();
-      return Object.fromEntries([...form.entries()].map(([k, v]) => [k, String(v)]));
-    }
-    return (await request.json()) as Record<string, unknown>;
-  } catch {
-    throw new ApiError(400, 'invalid request body');
-  }
-}
-
-/** Zod failures → 400 with the first issue's message. */
-async function validate<T>(parse: () => T | Promise<T>): Promise<T> {
-  try {
-    return await parse();
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      throw new ApiError(400, error.issues[0]?.message ?? 'invalid input');
-    }
-    throw error;
-  }
-}
-
 const now = (): number => Date.now();
 
 function safeProfile(user: User): { id: number; username: string; displayName: string; isAdmin: boolean } {
@@ -84,19 +59,13 @@ function safeProfile(user: User): { id: number; username: string; displayName: s
   return { id: user.id, username: user.username, displayName: user.displayName, isAdmin: user.isAdmin };
 }
 
-const redirect = (location: string, cookie?: string): Response => {
-  const headers = new Headers({ location });
-  if (cookie) headers.set('set-cookie', cookie);
-  return new Response(null, { status: 303, headers });
-};
-
 export async function signup(request: Request, db: Db, opts: RateLimitOpts = {}): Promise<Response> {
   const limiter = opts.rateLimiter ?? httpRateLimiter;
   try {
     if (!limiter.attempt(clientIp(request)).ok) {
       throw new ApiError(429, 'too many attempts — try again later');
     }
-    const input = await validate(async () => signupSchema.parse(await readBody(request)));
+    const input = or400(signupSchema, await readBody(request));
 
     const settings = await settingsRepo.getSettings(db);
     if (!settings.joiningEnabled) throw new ApiError(403, 'joining is currently disabled');
@@ -142,7 +111,7 @@ export async function signup(request: Request, db: Db, opts: RateLimitOpts = {})
 export async function login(request: Request, db: Db, opts: RateLimitOpts = {}): Promise<Response> {
   const limiter = opts.rateLimiter ?? httpRateLimiter;
   try {
-    const input = await validate(async () => loginSchema.parse(await readBody(request)));
+    const input = or400(loginSchema, await readBody(request));
     if (!limiter.attempt(`${clientIp(request)}:${input.username.toLowerCase()}`).ok) {
       throw new ApiError(429, 'too many attempts — try again later');
     }

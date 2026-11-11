@@ -1,6 +1,6 @@
 # T04 — Albums & ratings
 
-Status: ⬜
+Status: ✅
 Depends on: T01, T02, T03
 
 ## Goal
@@ -94,11 +94,21 @@ island.
 
 ## Acceptance criteria
 
-- [ ] A curl-driven flow works: login as a member → submit in their week →
+- [x] A curl-driven flow works: login as a member → submit in their week →
       other member rates → album appears in `GET /api/albums` with correct
-      avg
-- [ ] Parser matrix fully green; no third-party API keys anywhere
-- [ ] `npm test` / `npm run test:coverage` green
+      avg (10 + 7 → `avgScore: 8.5`, `ratingCount: 2`, spotifyId parsed)
+- [x] Parser matrix fully green; no third-party API keys anywhere
+- [x] `npm test` / `npm run test:coverage` green (157 tests; coverage
+      92.8/90.0/93.3/93.5, `external.ts` at 100%)
+
+## Deviations & notes
+
+- **2026-11-11 — settings repo hardening (discovered during integration):
+  `setRotation` / `setLastRotatedWeek` now bootstrap the singleton row
+  first.** A bare UPDATE against a fresh database silently no-ops (no row
+  exists yet), so a rotation queue set before any `getSettings()` was
+  lost without a trace. Both setters now call `getSettings(db)` before
+  updating — idempotent for the existing flows.
 
 ## Out of scope
 

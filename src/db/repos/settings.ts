@@ -99,6 +99,9 @@ export async function getRotation(db: Db): Promise<number[]> {
 
 /** Overwrite the whole queue (admin reorder, weekly advance, overrides). */
 export async function setRotation(db: Db, ids: number[], now: number): Promise<void> {
+  // Ensure the singleton row exists — a bare UPDATE silently no-ops on a
+  // fresh database (no bootstrap yet).
+  await getSettings(db);
   await db
     .update(settings)
     .set({ rotation: JSON.stringify(ids), updatedAt: now })
@@ -111,6 +114,7 @@ export async function setLastRotatedWeek(
   week: string | null,
   now: number,
 ): Promise<void> {
+  await getSettings(db);
   await db
     .update(settings)
     .set({ lastRotatedWeek: week, updatedAt: now })
