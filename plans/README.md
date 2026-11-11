@@ -214,6 +214,13 @@ always Mondays.
   errors as `{ error: string }` with the right status (400 validation, 401
   unauthenticated, 403 forbidden, 404 missing, 409 conflict, 429 rate
   limited).
+- **Conditional rendering uses `<Show>` / `<Switch><Match>` helpers**
+  (owned convention, 2026-11-11) instead of `&&`/ternary short-circuits:
+  `src/components/react/{Show,Switch,Match}.tsx` work in React islands and
+  server-rendered inside `.astro` templates alike. `<Show>` maps to an `if`;
+  `<Switch>/<Match>` maps to a `switch` (first truthy arm wins — keep arms
+  exclusive and in priority order). No bare short-circuit component
+  rendering. Optional `fallback` slot/prop for the negative case.
 - Timestamps: `Date.now()` ms; dates: ISO `YYYY-MM-DD` strings.
 - Tests live in `test/` mirroring the source tree. DB tests open a fresh
   `:memory:` database (or temp file when WAL semantics matter), run
