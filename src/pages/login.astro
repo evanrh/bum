@@ -1,27 +1,24 @@
 ---
 import Base from '../layouts/Base.astro';
-import { Show } from '../components/react/Show.tsx';
-
-const error = Astro.url.searchParams.get('error');
+import { LoginForm } from '../components/islands/LoginForm.tsx';
 ---
 
 <Base title="Log in — Bum">
-  <Show when={error}>
-    <p class="rounded border border-red-500/50 bg-red-500/10 px-4 py-2 text-sm text-red-300" role="alert">
-      {error}
-    </p>
-  </Show>
-  <form method="post" action="/api/login" class="mt-6 flex max-w-sm flex-col gap-4">
-    <label class="text-sm text-zinc-300">
-      username
-      <input name="username" required autocomplete="username" class="mt-1 block w-full rounded bg-zinc-900 px-3 py-2 text-zinc-100" />
-    </label>
-    <label class="text-sm text-zinc-300">
-      password
-      <input type="password" name="password" required autocomplete="current-password" class="mt-1 block w-full rounded bg-zinc-900 px-3 py-2 text-zinc-100" />
-    </label>
-    <button class="rounded bg-zinc-100 px-3 py-2 font-medium text-zinc-900 hover:bg-white">log in</button>
-  </form>
+  <h1 class="mb-4 text-lg font-semibold text-zinc-100">Log in</h1>
+  <LoginForm client:load />
+  <noscript>
+    <form method="post" action="/api/login" class="mt-6 flex max-w-sm flex-col gap-4">
+      <label class="text-sm text-zinc-300">
+        username
+        <input name="username" required autocomplete="username" class="mt-1 block w-full rounded bg-zinc-900 px-3 py-2 text-zinc-100" />
+      </label>
+      <label class="text-sm text-zinc-300">
+        password
+        <input type="password" name="password" required autocomplete="current-password" class="mt-1 block w-full rounded bg-zinc-900 px-3 py-2 text-zinc-100" />
+      </label>
+      <button class="rounded bg-zinc-100 px-3 py-2 font-medium text-zinc-900" type="submit">log in</button>
+    </form>
+  </noscript>
   <p class="mt-4 text-sm text-zinc-400">
     no account? <a href="/signup" class="underline hover:text-zinc-200">sign up</a>
   </p>

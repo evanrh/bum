@@ -1,0 +1,39 @@
+---
+import Base from '../layouts/Base.astro';
+import { SubmitForm } from '../components/islands/SubmitForm.tsx';
+import { submitEligibility, turnSummary } from '../lib/dashboard.ts';
+import { getDb } from '../db/index.ts';
+
+const user = Astro.locals.user;
+const db = getDb();
+if (user === null) return Astro.redirect('/login');
+
+const eligibility = await submitEligibility(db, user.id);
+if (!eligibility.eligible) Astro.response.status = 404;
+const weekStart = eligibility.eligible ? (await turnSummary(db)).week : undefined;
+
+const reasonCopy: Record<string, string> = {
+  'no rotation defined': 'no rotation is set up yet — ask an admin.',
+  'not logged in': 'log in first.',
+  'not your week': "it's not your week — check the dashboard for the current picker.",
+  'week already submitted': 'an album was already submitted this week — head to the album page to rate it.',
+};
+---
+
+<Base title={eligibility.eligible ? 'Submit — Bum' : 'Not your week — Bum'}>
+  {
+    eligibility.eligible && weekStart ? (
+      <>
+        <h1 class="text-lg font-semibold text-zinc-100">Submit your pick</h1>
+        <p class="mb-4 mt-1 text-sm text-zinc-400">manual entry is fine — links are optional.</p>
+        <SubmitForm client:load weekStart={weekStart} />
+      </>
+    ) : (
+      <section class="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+        <h1 class="text-lg font-medium text-zinc-100">Can't submit right now</h1>
+        <p class="mt-2 text-sm text-zinc-400">{reasonCopy[eligibility.reason]}</p>
+        <a href="/" class="mt-4 inline-block text-sm text-amber-400 underline">back to the dashboard</a>
+      </section>
+    )
+  }
+</Base>

@@ -1,0 +1,24 @@
+---
+/**
+ * Read-only half-star scale — the single visual source of truth for the
+ * 1–10 rating scale. `score10` is the half-star integer (4.25 stars = 8.5);
+ * null → a dimmed empty scale. Used by cards and album pages.
+ */
+interface Props {
+  score10: number | null;
+  size?: 'text-sm' | 'text-base' | 'text-xl';
+}
+
+const { score10, size = 'text-base' } = Astro.props;
+const pct = score10 ? Math.round((score10 / 10) * 100) : 0;
+const label = score10 ? `${score10 / 2} stars` : 'not rated';
+---
+
+<span class:list={['star-display relative inline-flex leading-none align-middle', size]} role="img" aria-label={label}>
+  <span aria-hidden="true" class="text-zinc-700">★★★★★</span>
+  <span
+    aria-hidden="true"
+    class="star-display-fill absolute left-0 top-0 overflow-hidden whitespace-nowrap text-amber-400"
+    style={`width: ${pct}%`}
+  >★★★★★</span>
+</span>

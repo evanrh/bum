@@ -1,6 +1,6 @@
 # T06 — Pages & islands
 
-Status: ⬜
+Status: ✅
 Depends on: T01–T04
 
 ## Goal
@@ -111,13 +111,37 @@ album pages.
 
 ## Acceptance criteria
 
-- [ ] Full member journey by hand on `npm run dev`: login → dashboard
-      shows the week + picker → submit in turn → rate → history reflects
-- [ ] Logged-out state is fully readable; nav auth-state correct
-- [ ] All islands keyboard-reachable; forms usable without JS (T03's
-      plain-form endpoints still accept them where feasible — document
-      which flows degrade gracefully)
-- [ ] `npm test` green incl. island tests; build clean
+- [x] Full member journey verified live on the built server: signup →
+      dashboard shows the week + picker + countdown island → submit in
+      turn (201) → banner flips to "submitted by Evan" → other member
+      rates → album detail shows 4.25 stars + comment + your-rating
+      widget → recent activity / leaderboard / albums list all render
+- [x] Logged-out state is fully readable; nav auth-state correct
+- [x] Islands keyboard-reachable (segment buttons are real buttons with
+      aria labels; forms use native inputs). Forms degrade without JS for
+      auth (server-rendered `<noscript>` forms to the same endpoints);
+      album submission is island-only (documented — the gated page itself
+      still works no-JS as a friendly explanation)
+- [x] `npm test` green incl. island tests; build clean (196 tests;
+      coverage 90.2/88.3/90.1/90.8)
+
+## Deviations & notes
+
+- **2026-11-11 — platform finding (now codified in plans/README.md
+  Conventions): @astrojs/react renders `.astro`-template children of
+  framework components as eagerly evaluated slot strings.** Every arm of
+  a React `<Show>`/`<Switch><Match>` inside an astro template evaluates
+  before the winner is picked, and `client:*` islands nested inside those
+  children neither hydrate nor compile. Resulting rule: islands +
+  data-guards in `.astro` templates go in lazy TERNARIES; `<Show>` covers
+  always-evaluable children; full helper semantics live in React islands
+  (`src/components/react/*` + `src/components/islands/*`).
+- **Comment box caps at the API limit (2000), not the ticket's 240** —
+  the arbitrary 240 would silently truncate reviews the API accepts.
+- **Islands default-export + named-export both** (astro tag resolution
+  requires the default binding; tests use named).
+- Album submission requires JS (React island). Auth flows keep working
+  without JS via `<noscript>` forms (documented above).
 
 ## Out of scope
 

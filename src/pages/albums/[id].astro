@@ -1,0 +1,111 @@
+---
+import Base from '../../layouts/Base.astro';
+import AlbumEmbed from '../../components/AlbumEmbed.astro';
+import StarDisplay from '../../components/StarDisplay.astro';
+import { RatingWidget } from '../../components/islands/RatingWidget.tsx';
+import { Show } from '../../components/react/Show.tsx';
+import { getDb } from '../../db/index.ts';
+import * as albumsRepo from '../../db/repos/albums.ts';
+import * as usersRepo from '../../db/repos/users.ts';
+import * as ratingsRepo from '../../db/repos/ratings.ts';
+import { relativeTime } from '../../lib/dashboard.ts';
+
+const db = getDb();
+const user = Astro.locals.user;
+const now = Date.now();
+const id = Astro.params.id;
+const album = typeof id === 'string' ? await albumsRepo.getAlbumById(db, id) : undefined;
+
+if (!album) Astro.response.status = 404;
+
+const submitter = album ? await usersRepo.getUserById(db, album.submittedBy) : undefined;
+const stats = album ? (await albumsRepo.statsForAlbums(db, [album.id]))[album.id] : undefined;
+const ratings = album ? await ratingsRepo.listRatingsForAlbum(db, album.id) : [];
+const myRating = user && album ? ratings.find((row) => row.userId === user.id) : undefined;
+const avgHalfStars =
+  stats?.avgScore === null || stats?.avgScore === undefined ? null : Math.round(stats.avgScore * 2) / 2;
+const others = myRating ? ratings.filter((row) => row.userId !== user!.id) : ratings;
+const artistLine = album ? `${album.artist}${album.year ? ` (${album.year})` : ''}` : '';
+const loggedOut = user === null;
+---
+
+<Base title={album ? `${album.title} — Bum` : 'Album not found — Bum'}>
+  {
+    /* Data-dependent variants use lazy astro ternaries — show/match helpers
+       must not guard undefined data in .astro templates (their astro children
+       are eagerly rendered slot strings). */
+       album && submitter && stats ? (
+      <>
+        <section class="mb-8" aria-label="album">
+          <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+            <AlbumEmbed spotifyId={album.spotifyId} youtubeId={album.youtubeId} title={album.title} />
+            <h1 class="mt-4 text-2xl font-semibold text-zinc-100">{album.title}</h1>
+            <p class="text-zinc-400">{artistLine}</p>
+            <p class="mt-1 text-sm text-zinc-500">
+              picked by {submitter.displayName} · week of {album.weekStart} ·{' '}
+              {new Date(album.submittedAt).toISOString().slice(0, 10)}
+            </p>
+            <Show when={album.note}>
+              <p class="mt-3 rounded bg-zinc-950 px-4 py-3 text-sm italic text-zinc-300">“{album.note}”</p>
+            </Show>
+            <div class="mt-3 flex items-center gap-2">
+              <StarDisplay score10={avgHalfStars} />
+              <span class="text-sm text-zinc-300">{stats.avgScore ?? '—'}</span>
+              <span class="text-xs text-zinc-500">({stats.ratingCount} ratings)</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="mb-8" aria-label="your rating">
+          <h2 class="mb-3 text-sm font-semibold tracking-wide text-zinc-500 uppercase">your rating</h2>
+          <div class="rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            {
+              loggedOut ? (
+                <p class="text-sm text-zinc-500">log in to rate — <a class="underline" href="/login">log in</a></p>
+              ) : (
+                <RatingWidget
+                  client:visible
+                  albumId={album.id}
+                  initialScore={myRating?.score ?? null}
+                  initialComment={myRating?.comment ?? null}
+                />
+              )
+            }
+          </div>
+        </section>
+
+        <section aria-label="ratings">
+          <h2 class="mb-3 text-sm font-semibold tracking-wide text-zinc-500 uppercase">ratings ({ratings.length})</h2>
+          <ul class="divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900">
+            {
+              others.map((row) => (
+                <li class="flex flex-col gap-1 px-4 py-3">
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm font-medium text-zinc-200">{row.displayName}</span>
+                    <StarDisplay score10={row.score} size="text-sm" />
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <p class="text-sm text-zinc-400">{row.comment ?? ''}</p>
+                    <span class="text-xs text-zinc-600">{relativeTime(row.createdAt, now)}</span>
+                  </div>
+                </li>
+              ))
+            }
+            {
+              others.length === 0 && (
+                <li class="px-4 py-3 text-sm text-zinc-500">no ratings yet — be the first.</li>
+              )
+            }
+          </ul>
+          <p class="mt-2 text-xs text-zinc-600">your rating lives in the widget above.</p>
+        </section>
+      </>
+    ) : (
+      <section class="rounded-xl border border-zinc-800 bg-zinc-900 p-6">
+        <h1 class="text-lg font-medium text-zinc-100">Album not found</h1>
+        <p class="mt-2 text-sm text-zinc-400">that pick doesn't exist (it may have been deleted).</p>
+        <a href="/" class="mt-4 inline-block text-sm text-amber-400 underline">back to the dashboard</a>
+      </section>
+    )
+  }
+</Base>
