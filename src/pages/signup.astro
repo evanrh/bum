@@ -1,17 +1,16 @@
 ---
 import Base from '../layouts/Base.astro';
+import { Show } from '../components/react/Show.tsx';
 
 const error = Astro.url.searchParams.get('error');
 ---
 
 <Base title="Sign up — Bum">
-  {
-    error && (
-      <p class="rounded border border-red-500/50 bg-red-500/10 px-4 py-2 text-sm text-red-300" role="alert">
-        {error}
-      </p>
-    )
-  }
+  <Show when={error}>
+    <p class="rounded border border-red-500/50 bg-red-500/10 px-4 py-2 text-sm text-red-300" role="alert">
+      {error}
+    </p>
+  </Show>
   <form method="post" action="/api/signup" class="mt-6 flex max-w-sm flex-col gap-4">
     <label class="text-sm text-zinc-300">
       join code

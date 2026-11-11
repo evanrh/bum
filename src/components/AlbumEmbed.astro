@@ -1,4 +1,7 @@
 ---
+import { Match } from './react/Match.tsx';
+import { Show } from './react/Show.tsx';
+import { Switch } from './react/Switch.tsx';
 import { spotifyEmbedUrl, youtubeEmbedUrl } from '../lib/external.ts';
 
 interface Props {
@@ -8,25 +11,26 @@ interface Props {
 }
 
 const { spotifyId, youtubeId, title } = Astro.props;
+
+const spotifySrc = spotifyId ? spotifyEmbedUrl(spotifyId) : undefined;
+const youtubeSrc = youtubeId ? youtubeEmbedUrl(youtubeId) : undefined;
 ---
 
-{
-  spotifyId && (
-    <iframe
-      src={spotifyEmbedUrl(spotifyId)}
-      class="w-full"
-      height="152"
-      loading="lazy"
-      title={`${title} — Spotify`}
-      allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-    />
-  )
-}
-{
-  youtubeId && (
+<Show when={spotifySrc}>
+  <iframe
+    src={spotifySrc!}
+    class="w-full"
+    height="152"
+    loading="lazy"
+    title={`${title} — Spotify`}
+    allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+  />
+</Show>
+<Switch>
+  <Match when={youtubeSrc}>
     <div class="aspect-video">
       <iframe
-        src={youtubeEmbedUrl(youtubeId)}
+        src={youtubeSrc!}
         class="h-full w-full"
         loading="lazy"
         title={`${title} — YouTube`}
@@ -34,8 +38,8 @@ const { spotifyId, youtubeId, title } = Astro.props;
         allowfullscreen
       />
     </div>
-  )
-}
-{!spotifyId && !youtubeId && (
-  <div class="rounded bg-zinc-900 px-6 py-8 text-center text-sm text-zinc-500">no preview available</div>
-)}
+  </Match>
+  <Match when={!spotifySrc && !youtubeSrc}>
+    <div class="rounded bg-zinc-900 px-6 py-8 text-center text-sm text-zinc-500">no preview available</div>
+  </Match>
+</Switch>
