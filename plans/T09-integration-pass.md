@@ -77,8 +77,10 @@ with commits still prefixed by the owning ticket number (`fix(T04): …`)
 
 ## Acceptance criteria
 
-- [ ] `scripts/smoke.sh` passes against the dev server **and** the
-      Docker compose stack
+- [x] `scripts/smoke.sh` passes against the dev server **and** the
+      Docker compose stack (re-run after every fix round — the compose
+      pass with the render fixes: fresh `./data`, pinned bootstrap code,
+      27/27 green)
 - [x] Coverage thresholds met (90.6/86.0/92.3/91.6); typecheck+build clean
 - [x] README quickstart verified on a pristine `DATABASE_URL` (migrate +
       seed → demo credentials printed)
@@ -128,6 +130,10 @@ with commits still prefixed by the owning ticket number (`fix(T04): …`)
     LEFT JOINs (`albums`→`ratings`) and returns `{avgScore: null,
     ratingCount: 0}` for any existing album; the repo test's contract was
     updated accordingly.
+- **Compose re-run after the render fixes** (2026-11-11): `docker compose
+  down -v` + fresh `./data`, pinned `BOOTSTRAP_JOIN_CODE` through both
+  containers, `scripts/smoke.sh <BASE_URL> <JOIN_CODE>` → ALL CHECKS
+  PASSED (27 green assertions incl. the rendered-page checks).
 
 ## Out of scope
 
