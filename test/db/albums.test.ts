@@ -89,7 +89,7 @@ describe('albums repo', () => {
     expect(paged.items[0].title).toBe('punk');
   });
 
-  it('statsForAlbums aggregates per id and skips unknown ones', async () => {
+  it('statsForAlbums aggregates per id, zeroes unrated ones, skips unknown ones', async () => {
     const jazz = await albumsRepo.insertAlbum(db, { title: 'jazz', artist: 'a', submittedBy: fixture.bob.id, submittedAt: 100, weekStart: '2026-01-05' });
     const prog = await albumsRepo.insertAlbum(db, { title: 'prog', artist: 'b', submittedBy: fixture.carol.id, submittedAt: 200, weekStart: '2026-01-12' });
     if (!jazz.ok || !prog.ok) throw new Error('inserts should succeed');
@@ -97,7 +97,10 @@ describe('albums repo', () => {
     await ratingsRepo.upsertRating(db, { albumId: jazz.album.id, userId: fixture.carol.id, score: 10 }, 101);
     const stats = await albumsRepo.statsForAlbums(db, [jazz.album.id, prog.album.id, 'does-not-exist']);
     expect(stats[jazz.album.id]).toEqual({ avgScore: 8.5, ratingCount: 2 });
-    expect(stats[prog.album.id]).toBeUndefined();
+    // unrated-but-existing albums must still appear (page guards treat a
+    // missing entry as "album not found"; see T09 deviations)
+    expect(stats[prog.album.id]).toEqual({ avgScore: null, ratingCount: 0 });
+    expect(stats['does-not-exist']).toBeUndefined();
     expect(await albumsRepo.statsForAlbums(db, [])).toEqual({});
   });
 
