@@ -37,14 +37,15 @@ Per the locked spec in `plans/README.md`:
 
 - `src/lib/albums.ts` —
   `submitAlbum(user, db, settingsRepo, input, {now, fetch})`:
-  requireActiveUser; compute `currentTurn` via T02; if `weekIndex < 0` →
-  400 "club hasn't started"; if `picker?.id !== user.id` → 403 "it's not
+  requireActiveUser; compute `currentTurn` via T02; empty queue →
+  400 "no rotation defined"; if `pickerId !== user.id` → 403 "it's not
   your week"; if `albums.getByWeekStart` exists → 409 "an album was
   already submitted this week". Zod input: title 1–200, artist 1–200,
   `year` optional 1900–2100, `spotify_url`/`youtube_url` optional strings,
   `note` ≤ 1000. At least one of the two URLs **may** be empty (manual
   entry allowed); parse → store ids; resolve cover (best-effort); insert.
-  Returns the row. Week attribution: `week_start` from `currentTurn`.
+  Returns the row. Week attribution: `week_start` = the ISO Monday from
+  `currentTurn`.
 - `src/lib/ratings.ts` — `upsertRating(user, db, input)`:
   requireActiveUser; album must exist (404); Zod `score` int 1–10
   (= stars × 2), `comment` optional ≤ 2000; upsert via repo. Any member
@@ -81,7 +82,7 @@ island.
 - `test/lib/albums.test.ts` — fixture settings/users from T01/T02
   helpers: submission during a member's week → row with correct
   `week_start`; non-picker → 403 (message asserts it names the picker);
-  duplicate week → 409; before epoch → 400; deactivated → 403; year=0 /
+  duplicate week → 409; empty queue → 400; deactivated → 403; year=0 /
   note 1001 chars → 400; spotify+youtube both parsed; neither URL → ok;
   cover failure doesn't fail submission (offline fetch stub).
 - `test/lib/ratings.test.ts` — upsert new vs edit (created_at preserved,
