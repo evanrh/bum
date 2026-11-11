@@ -6,7 +6,7 @@ services:
     entrypoint:
       - sh
       - -c
-      - mkdir -p /data && chown -R node:node /data && node dist/jobs/migrate.mjs
+      - mkdir -p /data && node dist/jobs/migrate.mjs && chown -R node:node /data
     environment:
       DATABASE_URL: /data/bum.db
     volumes:
@@ -18,6 +18,7 @@ services:
       DATABASE_URL: /data/bum.db
       HOST: 0.0.0.0
       PORT: "4321"
+      BOOTSTRAP_JOIN_CODE: ${BOOTSTRAP_JOIN_CODE:-}
     ports:
       - "4321:4321"
     volumes:
@@ -45,6 +46,7 @@ services:
     environment:
       DATABASE_URL: /data/bum.db
       JOBS_CRON: "on"
+      BOOTSTRAP_JOIN_CODE: ${BOOTSTRAP_JOIN_CODE:-}
     volumes:
       - ./data:/data
     depends_on:

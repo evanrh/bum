@@ -4,6 +4,20 @@ A small, single-group web app for a group of friends: each week a different
 member is on rotation to submit one album, everyone rates it (half-stars),
 and a running record is kept.
 
+## Quickstart
+
+```sh
+git clone https://github.com/evanrh/bum.git && cd bum
+npm install
+npm run db:migrate && npm run db:seed   # demo data: admin/bumadmin1 + 3 members
+npm run dev                             # http://localhost:4321
+```
+
+- Skipping the seed: the first-run log prints the bootstrap join code —
+  signup with it and the first account becomes the admin.
+- Demo credentials (after `db:seed`): user `admin`, password `bumadmin1`,
+  join code `bumseed`.
+
 ## Stack
 
 - Astro 5 (SSR, `@astrojs/node` standalone adapter) + React islands
@@ -66,3 +80,13 @@ Feature work is tracked as self-contained tickets in [`plans/`](plans/README.md)
 ordered by dependency and delegated to agents one at a time. Read
 `plans/README.md` first — it carries the locked technical decisions,
 the canonical data model, and the ticket index.
+
+## Troubleshooting
+
+| Symptom | Cause + fix |
+|---|---|
+| `SQLITE_BUSY` / "database is locked" | Two long write transactions colliding (web + jobs share one SQLite file in WAL mode). Writes are short-lived; retry. If it recurs on every boot, make sure only one process is starting from a migrated DB. |
+| Everyone logged out after a restart | The sessions store is in-memory by design (locked decision) — sessions clear when the process restarts. Fresh logins rebuild them. |
+| Job "replays" several weeks after a restore | `settings.last_rotated_week` is part of the DB — restoring an older backup rewinds the checkpoint, and the next jobs run re-advances each missed week exactly once. |
+| Week boundaries look off by an hour | Weeks are fixed Mondays 00:00 in `America/New_York` by design (single-operator deployment); DST shifts the clock, never the calendar week. |
+| Container signup rejects every join code | In containers the bootstrap code comes from `BOOTSTRAP_JOIN_CODE` — make sure it's passed to **both** the `web` and `jobs` services (the jobs process may bootstrap settings first). |

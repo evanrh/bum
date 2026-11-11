@@ -25,6 +25,7 @@ export function jsonError(error: unknown): Response {
       headers: { 'content-type': 'application/json' },
     });
   }
+  console.error('[bum:api] unhandled endpoint error:', error);
   return new Response(JSON.stringify({ error: 'internal server error' }), {
     status: 500,
     headers: { 'content-type': 'application/json' },
