@@ -1,7 +1,5 @@
 ---
-import { Match } from './react/Match.tsx';
 import { Show } from './react/Show.tsx';
-import { Switch } from './react/Switch.tsx';
 import { spotifyEmbedUrl, youtubeEmbedUrl } from '../lib/external.ts';
 
 interface Props {
@@ -26,8 +24,11 @@ const youtubeSrc = youtubeId ? youtubeEmbedUrl(youtubeId) : undefined;
     allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
   />
 </Show>
-<Switch>
-  <Match when={youtubeSrc}>
+{
+  /* Lazy ternary (see Conventions): the old <Switch>/<Match> arms rendered
+     here as eager slot strings that <Switch> dropped entirely — the YouTube
+     embed and the placeholder never rendered. */
+  youtubeSrc ? (
     <div class="aspect-video">
       <iframe
         src={youtubeSrc!}
@@ -38,8 +39,7 @@ const youtubeSrc = youtubeId ? youtubeEmbedUrl(youtubeId) : undefined;
         allowfullscreen
       />
     </div>
-  </Match>
-  <Match when={!spotifySrc && !youtubeSrc}>
+  ) : !spotifySrc ? (
     <div class="rounded bg-zinc-900 px-6 py-8 text-center text-sm text-zinc-500">no preview available</div>
-  </Match>
-</Switch>
+  ) : null
+}
