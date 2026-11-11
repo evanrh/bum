@@ -3,9 +3,11 @@ import Base from '../layouts/Base.astro';
 import AlbumEmbed from '../components/AlbumEmbed.astro';
 import StarDisplay from '../components/StarDisplay.astro';
 import Countdown, { remainingText } from '../components/islands/Countdown.tsx';
+import { RatingWidget } from '../components/islands/RatingWidget.tsx';
 import { Show } from '../components/react/Show.tsx';
 import { getDb } from '../db/index.ts';
 import * as albumsRepo from '../db/repos/albums.ts';
+import * as ratingsRepo from '../db/repos/ratings.ts';
 import * as usersRepo from '../db/repos/users.ts';
 import { leaderboard, recentActivity, relativeTime, turnSummary } from '../lib/dashboard.ts';
 
@@ -23,6 +25,14 @@ const featuredStats = featured
   ? (await albumsRepo.statsForAlbums(db, [featured.id]))[featured.id]
   : undefined;
 const featuredSubmitter = featured ? await usersRepo.getUserById(db, featured.submittedBy) : undefined;
+
+// The featured album's rating by the viewing member (undefined when new to it).
+const myRating =
+  user !== null && featured
+    ? (await ratingsRepo.listRatingsForAlbum(db, featured.id)).find(
+        (row) => row.userId === user.id,
+      )
+    : undefined;
 
 const featuredAvg = featuredStats?.avgScore ?? null;
 const avgHalfStars = featuredAvg === null ? null : Math.round(featuredAvg * 2) / 2;
