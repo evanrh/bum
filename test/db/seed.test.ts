@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { seed } from '../../src/db/seed.ts';
+import { weekId } from '../../src/lib/rotation.ts';
 import * as usersRepo from '../../src/db/repos/users.ts';
 import * as albumsRepo from '../../src/db/repos/albums.ts';
 import * as settingsRepo from '../../src/db/repos/settings.ts';
@@ -48,7 +49,19 @@ describe('seed script', () => {
     expect(albums.items[1].ratingCount).toBe(4);
 
     const settings = await settingsRepo.getSettings(db);
-    expect(await albumsRepo.getAlbumByWeekStart(db, settings.rotationEpoch)).toBeUndefined();
+    // The queue is seeded in credentials order (admin first) and the
+    // current week is left empty.
+    const usernamesById = new Map(
+      (await usersRepo.listAllUsers(db)).map((u) => [u.id, u.username]),
+    );
+    expect((await settingsRepo.getRotation(db)).map((id) => usernamesById.get(id))).toEqual([
+      'admin',
+      'bob',
+      'carol',
+      'dave',
+    ]);
+    expect(settings.lastRotatedWeek).toBeNull();
+    expect(await albumsRepo.getAlbumByWeekStart(db, weekId(new Date()))).toBeUndefined();
     expect(await settingsRepo.verifyJoinCode(db, 'bumseed')).toBe(true);
   });
 
@@ -78,10 +91,9 @@ describe('seed script', () => {
   it('seeded history is two consecutive past weeks, never the current week', async () => {
     const result = await seed(db, { force: true });
     const weeks = result?.albums.map((a) => a.weekStart) ?? [];
-    const settings = await settingsRepo.getSettings(db);
     // ISO dates compare lexicographically; oldest first and both in the past.
     expect(weeks).toHaveLength(2);
     expect(weeks[0] < weeks[1]).toBe(true);
-    expect(weeks[1] < settings.rotationEpoch).toBe(true);
+    expect(weeks[1] < weekId(new Date())).toBe(true);
   });
 });

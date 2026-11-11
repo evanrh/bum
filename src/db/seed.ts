@@ -4,16 +4,17 @@ import { sql } from 'drizzle-orm';
 
 import { applyMigrations } from './migrate.ts';
 import { createDatabase, type Db } from './index.ts';
+import { addWeeksISO, weekId } from '../lib/rotation.ts';
 import * as usersRepo from './repos/users.ts';
 import * as albumsRepo from './repos/albums.ts';
 import * as ratingsRepo from './repos/ratings.ts';
 import * as settingsRepo from './repos/settings.ts';
 import {
   albums,
+  auditLog,
   ratings,
   sessions,
   settings,
-  skippedTurns,
   users,
 } from './schema.ts';
 
@@ -53,7 +54,7 @@ export async function seed(db: Db, opts: SeedOptions = {}): Promise<SeedResult |
     // Deterministic reseed — wipe in FK-safe order.
     await db.delete(ratings);
     await db.delete(albums);
-    await db.delete(skippedTurns);
+    await db.delete(auditLog);
     await db.delete(sessions);
     await db.delete(users);
     await db.delete(settings);
@@ -91,8 +92,15 @@ async function seedFresh(db: Db): Promise<SeedResult> {
     members[cred.username] = { id: user.id };
   }
 
-  const mondayTwoWeeksAgo = settingsRepo.utcMondayISO(now - 14 * DAY_MS);
-  const mondayLastWeek = settingsRepo.utcMondayISO(now - 7 * DAY_MS);
+  // Seed rotation queue in credentials order (admin first) — the head is
+  // the current picker, so a seeded database is immediately usable.
+  await settingsRepo.setRotation(db, Object.values(members).map((m) => m.id), now);
+
+  // Week ids are Eastern-calendar Mondays (plans/README.md); the two seeded
+  // albums sit in the two past weeks, leaving the current week empty.
+  const currentWeek = weekId(new Date(now));
+  const mondayTwoWeeksAgo = addWeeksISO(currentWeek, -2);
+  const mondayLastWeek = addWeeksISO(currentWeek, -1);
 
   const jazzWeek = await albumsRepo.insertAlbum(db, {
     title: 'Kind of Blue',

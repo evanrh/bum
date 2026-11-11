@@ -27,24 +27,18 @@ export const settings = sqliteTable(
     joiningEnabled: integer('joining_enabled', { mode: 'boolean' })
       .notNull()
       .default(true),
-    /** ISO date; start of week 0 (normalized to a week start on write/read). */
-    rotationEpoch: text('rotation_epoch').notNull(),
-    /** 0 = Sunday … 6 = Saturday. */
-    weekStartDay: integer('week_start_day').notNull().default(1),
-    weekStartHour: integer('week_start_hour').notNull().default(0),
-    /** IANA time zone name, e.g. 'America/New_York'. */
-    timezone: text('timezone').notNull().default('UTC'),
-    /** Bumped by +1 per admin skip (plans/README.md "Rotation semantics"). */
-    rotationOffset: integer('rotation_offset').notNull().default(0),
-    /** ISO date checkpoint for the T05 reconciliation job. */
-    lastReconciledWeek: text('last_reconciled_week'),
+    /**
+     * The rotation queue: JSON array of user ids. The head (index 0) is the
+     * current picker (plans/README.md "Rotation semantics").
+     */
+    rotation: text('rotation').notNull().default('[]'),
+    /** ISO Monday checkpoint: the last week the T05 job advanced past. */
+    lastRotatedWeek: text('last_rotated_week'),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },
   (t) => [
     check('settings_id_singleton', sql`${t.id} = 1`),
-    check('settings_week_start_day_range', sql`${t.weekStartDay} BETWEEN 0 AND 6`),
-    check('settings_week_start_hour_range', sql`${t.weekStartHour} BETWEEN 0 AND 23`),
     check('settings_joining_enabled_bool', sql`${t.joiningEnabled} IN (0, 1)`),
   ],
 );
@@ -60,8 +54,6 @@ export const users = sqliteTable(
     isAdmin: integer('is_admin', { mode: 'boolean' }).notNull().default(false),
     /** Soft "deletion": history is kept, login is blocked. */
     isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
-    /** Join order (max+1); admins can reorder actives. */
-    rotationOrder: integer('rotation_order').notNull(),
     joinedAt: integer('joined_at').notNull(),
   },
   (t) => [
@@ -135,22 +127,28 @@ export const ratings = sqliteTable(
   ],
 );
 
-export const skippedTurns = sqliteTable(
-  'skipped_turns',
+/**
+ * Generic audit log — every rotation change (weekly advance, admin override,
+ * queue membership changes) lands here. No skip-specific semantics; `action`
+ * is a short machine tag, `detail` a human-readable summary.
+ */
+/**
+ * Generic audit log — every rotation change (weekly advance, admin override,
+ * queue membership changes) lands here. No skip-specific semantics; `action`
+ * is a short machine tag, `detail` a human-readable summary.
+ */
+export const auditLog = sqliteTable(
+  'audit_log',
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
-    weekStart: text('week_start').notNull(),
-    userId: integer('user_id')
-      .notNull()
-      .references(() => users.id),
-    /** 'auto' = missed a full week (T05 job); 'admin' = mid-week admin skip (T07). */
-    kind: text('kind').notNull(),
-    recordedAt: integer('recorded_at').notNull(),
+    /** The acting user, or null for system actions (the jobs process). */
+    actorUserId: integer('actor_user_id').references(() => users.id),
+    /** Machine tag, e.g. 'queue.advance' | 'queue.override' | 'queue.remove'. */
+    action: text('action').notNull(),
+    detail: text('detail'),
+    createdAt: integer('created_at').notNull(),
   },
-  (t) => [
-    unique('skipped_turns_week_user').on(t.weekStart, t.userId),
-    check('skipped_turns_kind', sql`${t.kind} IN ('auto', 'admin')`),
-  ],
+  (t) => [index('audit_log_created_at_idx').on(t.createdAt)],
 );
 
 export type Settings = InferSelectModel<typeof settings>;
@@ -163,5 +161,5 @@ export type Album = InferSelectModel<typeof albums>;
 export type AlbumInsert = InferInsertModel<typeof albums>;
 export type Rating = InferSelectModel<typeof ratings>;
 export type RatingInsert = InferInsertModel<typeof ratings>;
-export type SkippedTurn = InferSelectModel<typeof skippedTurns>;
-export type SkippedTurnInsert = InferInsertModel<typeof skippedTurns>;
+export type AuditLog = InferSelectModel<typeof auditLog>;
+export type AuditLogInsert = InferInsertModel<typeof auditLog>;

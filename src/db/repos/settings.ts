@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 
 import { settings, type Settings, type SettingsInsert } from '../schema.ts';
+import { parseQueue } from '../../lib/rotation.ts';
 import type { Db } from '../index.ts';
 
 const BCRYPT_COST = 12;
@@ -13,27 +14,7 @@ export function randomJoinCode(length = 8): string {
   return Array.from(bytes, (b) => JOIN_CODE_ALPHABET[b % JOIN_CODE_ALPHABET.length]).join('');
 }
 
-/** ISO date (YYYY-MM-DD) of the Monday (UTC calendar) containing `nowMs`. */
-export function utcMondayISO(nowMs: number): string {
-  const d = new Date(nowMs);
-  const offset = (d.getUTCDay() + 6) % 7;
-  const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - offset));
-  return monday.toISOString().slice(0, 10);
-}
-
-export type UpdatedSettingsFields = Partial<
-  Pick<
-    Settings,
-    | 'groupName'
-    | 'joiningEnabled'
-    | 'rotationEpoch'
-    | 'weekStartDay'
-    | 'weekStartHour'
-    | 'timezone'
-    | 'rotationOffset'
-    | 'lastReconciledWeek'
-  >
->;
+export type UpdatedSettingsFields = Partial<Pick<Settings, 'groupName' | 'joiningEnabled'>>;
 
 /**
  * Read the singleton settings row, bootstrapping it on first use. The join
@@ -51,7 +32,6 @@ export async function getSettings(db: Db, now: number = Date.now()): Promise<Set
     await db.insert(settings).values({
       id: 1,
       joinCodeHash,
-      rotationEpoch: utcMondayISO(now),
       createdAt: now,
       updatedAt: now,
     });
@@ -89,16 +69,7 @@ export async function updateSettings(
   now: number,
 ): Promise<Settings> {
   // Explicit whitelist — unknown fields are dropped, not smuggled through.
-  const allowed: Array<keyof Settings> = [
-    'groupName',
-    'joiningEnabled',
-    'rotationEpoch',
-    'weekStartDay',
-    'weekStartHour',
-    'timezone',
-    'rotationOffset',
-    'lastReconciledWeek',
-  ];
+  const allowed: Array<keyof Settings> = ['groupName', 'joiningEnabled'];
   const set: Record<string, unknown> = { updatedAt: now };
   for (const key of allowed) {
     if (patch[key as keyof typeof patch] !== undefined) {
@@ -117,5 +88,31 @@ export async function setJoinCodeHash(db: Db, joinCodeHash: string, now: number)
   await db
     .update(settings)
     .set({ joinCodeHash, updatedAt: now })
+    .where(eq(settings.id, 1));
+}
+
+/** The rotation queue (user ids, head = current picker); [] when unset. */
+export async function getRotation(db: Db): Promise<number[]> {
+  const current = await getSettings(db);
+  return parseQueue(current.rotation);
+}
+
+/** Overwrite the whole queue (admin reorder, weekly advance, overrides). */
+export async function setRotation(db: Db, ids: number[], now: number): Promise<void> {
+  await db
+    .update(settings)
+    .set({ rotation: JSON.stringify(ids), updatedAt: now })
+    .where(eq(settings.id, 1));
+}
+
+/** The weekly-advance checkpoint (ISO Monday); null = never rotated. */
+export async function setLastRotatedWeek(
+  db: Db,
+  week: string | null,
+  now: number,
+): Promise<void> {
+  await db
+    .update(settings)
+    .set({ lastRotatedWeek: week, updatedAt: now })
     .where(eq(settings.id, 1));
 }

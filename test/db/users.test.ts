@@ -10,14 +10,13 @@ beforeEach(async () => {
 });
 
 describe('users repo', () => {
-  it('createUser assigns sequential rotation_order in join order', async () => {
-    const now = 1;
-    const a = await usersRepo.createUser(db, { username: 'alice', passwordHash: hash('x'), displayName: 'A', isAdmin: true }, now);
-    const b = await usersRepo.createUser(db, { username: 'brad', passwordHash: hash('x'), displayName: 'B', isAdmin: false }, now);
-    const c = await usersRepo.createUser(db, { username: 'cyd', passwordHash: hash('x'), displayName: 'C', isAdmin: false }, now);
-    expect(a.rotationOrder).toBe(1);
-    expect(b.rotationOrder).toBe(2);
-    expect(c.rotationOrder).toBe(3);
+  it('createUser stores join time and carries no rotation state', async () => {
+    const a = await usersRepo.createUser(db, { username: 'alice', passwordHash: hash('x'), displayName: 'A', isAdmin: true }, 100);
+    const b = await usersRepo.createUser(db, { username: 'brad', passwordHash: hash('x'), displayName: 'B', isAdmin: false }, 200);
+    expect(a.joinedAt).toBe(100);
+    expect(b.joinedAt).toBe(200);
+    // Rotation order lives in the settings queue, not on the row.
+    expect('rotationOrder' in a).toBe(false);
   });
 
   it('rejects duplicate usernames case-insensitively', async () => {
@@ -37,9 +36,9 @@ describe('users repo', () => {
     await expect(
       usersRepo.createUser(db, { username: 'BOB', passwordHash: hash('x'), displayName: 'Bob II', isAdmin: false }, 3),
     ).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT_UNIQUE' });
-    // Reactivation keeps the historical rotation slot.
+    // Reactivation restores login; the queue itself is a settings concern.
     const reactivated = await usersRepo.setUserActive(db, fixture.bob.id, true);
-    expect(reactivated.rotationOrder).toBe(1);
+    expect(reactivated.isActive).toBe(true);
     expect((await usersRepo.listActiveUsers(db)).map((u) => u.username)).toEqual(['bob', 'carol', 'dave', 'admin']);
   });
 
@@ -68,24 +67,5 @@ describe('users repo', () => {
     const fixture = await seedMembers(db);
     const updated = await usersRepo.setUserPassword(db, fixture.bob.id, hash('new-secret'));
     expect(updated.passwordHash).not.toBe(hash('pw-bob'));
-  });
-
-  it('setRotationOrders normalizes 1..n for the given order and leaves the rest untouched', async () => {
-    const fixture = await seedMembers(db);
-    const updated = await usersRepo.setRotationOrders(db, [fixture.dave.id, fixture.admin.id, fixture.bob.id, fixture.carol.id]);
-    const all = await usersRepo.listAllUsers(db);
-    expect(updated).toHaveLength(4);
-    expect(all.map((u) => [u.username, u.rotationOrder])).toEqual([
-      ['dave', 1],
-      ['admin', 2],
-      ['bob', 3],
-      ['carol', 4],
-    ]);
-  });
-
-  it('setRotationOrder writes a single slot', async () => {
-    const fixture = await seedMembers(db);
-    const updated = await usersRepo.setRotationOrder(db, fixture.bob.id, 10);
-    expect(updated.rotationOrder).toBe(10);
   });
 });

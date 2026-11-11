@@ -28,7 +28,7 @@ export type FixtureMembers = {
   dave: { id: number };
 };
 
-/** Four members in join order: bob(1) carol(2) dave(3) admin(4). */
+/** Four members in creation order: bob, carol, dave, admin. */
 export async function seedMembers(db: Db, now: number = 1_000_000): Promise<FixtureMembers> {
   const make = async (username: string, isAdmin: boolean) =>
     await usersRepo.createUser(

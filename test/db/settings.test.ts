@@ -22,22 +22,33 @@ describe('settings repo', () => {
     const second = await settingsRepo.getSettings(db, 2000);
     expect(second).toEqual(first);
     expect(second.id).toBe(1);
-    expect(second.weekStartDay).toBe(1);
-    expect(second.weekStartHour).toBe(0);
-    expect(second.timezone).toBe('UTC');
-    expect(second.rotationOffset).toBe(0);
-    expect(second.lastReconciledWeek).toBeNull();
+    expect(second.rotation).toBe('[]');
+    expect(second.lastRotatedWeek).toBeNull();
   });
 
-  it('bootstraps rotation_epoch to the Monday of the bootstrap week (UTC)', async () => {
-    // Wed 2026-01-07 UTC → Monday 2026-01-05.
-    const wednesdayUtc = Date.UTC(2026, 0, 7, 15);
-    const settings = await settingsRepo.getSettings(db, wednesdayUtc);
-    expect(settings.rotationEpoch).toBe('2026-01-05');
-    // Sunday UTC → the Monday *containing* it, i.e. two days later.
-    const sundayUtc = Date.UTC(2026, 0, 11);
-    const settings2 = await settingsRepo.getSettings(db, sundayUtc);
-    expect(settings2.rotationEpoch).toBe('2026-01-05');
+  it('the rotation queue defaults to empty on a fresh database', async () => {
+    expect(await settingsRepo.getRotation(db)).toEqual([]);
+  });
+
+  it('setRotation round-trips the queue and bumps updated_at', async () => {
+    await settingsRepo.getSettings(db, 1000);
+    await settingsRepo.setRotation(db, [7, 3, 11], 2000);
+    expect(await settingsRepo.getRotation(db)).toEqual([7, 3, 11]);
+    const row = await settingsRepo.getSettings(db);
+    expect(row.updatedAt).toBe(2000);
+    await settingsRepo.setRotation(db, [], 3000);
+    expect(await settingsRepo.getRotation(db)).toEqual([]);
+    expect((await settingsRepo.getSettings(db)).updatedAt).toBe(3000);
+  });
+
+  it('setLastRotatedWeek stores the checkpoint and clears it back to null', async () => {
+    await settingsRepo.getSettings(db, 1000);
+    await settingsRepo.setLastRotatedWeek(db, '2026-01-05', 2000);
+    expect((await settingsRepo.getSettings(db)).lastRotatedWeek).toBe('2026-01-05');
+    expect((await settingsRepo.getSettings(db)).updatedAt).toBe(2000);
+    await settingsRepo.setLastRotatedWeek(db, null, 3000);
+    expect((await settingsRepo.getSettings(db)).lastRotatedWeek).toBeNull();
+    expect((await settingsRepo.getSettings(db)).updatedAt).toBe(3000);
   });
 
   it('respects BOOTSTRAP_JOIN_CODE when set (no plaintext logged)', async () => {
@@ -86,30 +97,22 @@ describe('settings repo', () => {
     expect(await settingsRepo.verifyJoinCode(db, newCode)).toBe(true);
   });
 
-  it('updateSettings whitelists fields and bumps updated_at, allowing lastReconciledWeek to be cleared', async () => {
+  it('updateSettings whitelists fields and bumps updated_at', async () => {
     const created = await settingsRepo.getSettings(db, 1000);
     const updated = await settingsRepo.updateSettings(
       db,
       {
         groupName: 'Loud Basement Club',
-        timezone: 'America/New_York',
-        weekStartHour: 14,
-        rotationOffset: 1,
+        joiningEnabled: false,
         // smuggled fields are dropped by the whitelist — typed as never here
         ...( { passwordHash: 'sneaky' } as object as settingsRepo.UpdatedSettingsFields),
       },
       3000,
     );
     expect(updated.groupName).toBe('Loud Basement Club');
-    expect(updated.timezone).toBe('America/New_York');
-    expect(updated.weekStartHour).toBe(14);
-    expect(updated.rotationOffset).toBe(1);
+    expect(updated.joiningEnabled).toBe(false);
     expect(updated.updatedAt).toBe(3000);
     expect(updated.createdAt).toBe(1000);
-    // clearing a nullable checkpoint writes an explicit null
-    const cleared = await settingsRepo.updateSettings(db, { lastReconciledWeek: null }, 4000);
-    expect(cleared.lastReconciledWeek).toBeNull();
-    expect(cleared.updatedAt).toBe(4000);
-    expect(created.joinCodeHash).toBe(updated.joinCodeHash);
+    expect(updated.joinCodeHash).toBe(created.joinCodeHash);
   });
 });
