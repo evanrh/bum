@@ -108,6 +108,26 @@ with commits still prefixed by the owning ticket number (`fix(T04): …`)
     missing env there produced a random code that defeated web's).
 - **Docker smoke note**: `docker compose down -v` does not touch the
   `./data` bind mount — pristine-stack runs need `rm -rf data`.
+- **Second rendered-page pass** (owner reported a blank `/admin`; smoke
+  gained page-content checks to pin each of these):
+  - fix(T06): `.astro` templates must use lazy ternaries — `index.astro`
+    referenced `myRating`/`RatingWidget` without defining them (the block
+    only rendered for rated albums, so every logged-in view of a rated
+    week → 500 "myRating is not defined").
+  - fix(T06): `AlbumEmbed.astro`'s `<Switch>/<Match>` arms were eager slot
+    strings that `<Switch>` dropped — no embed (or placeholder) ever
+    rendered; converted to a lazy ternary.
+  - fix(T07): `admin.astro` wrapped its whole body in `<Switch>/<Match>` —
+    the admin page rendered 100% blank (no arms, no islands, not even the
+    no-access arm); converted to lazy ternaries so the four islands
+    hydrate again.
+  - fix(T04): `statsForAlbums` only returned rows for albums with
+    ratings, so the "unrated" state read as data loss — fresh picks made
+    `/albums/{id}` serve "Album not found" (with 404 status) and the
+    dashboard's featured section stuck on "nothing submitted yet". It now
+    LEFT JOINs (`albums`→`ratings`) and returns `{avgScore: null,
+    ratingCount: 0}` for any existing album; the repo test's contract was
+    updated accordingly.
 
 ## Out of scope
 

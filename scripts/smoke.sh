@@ -99,6 +99,15 @@ expect_status "$status" 201 "admin submits the first pick"
 ALBUM_ID="$(extract_id)" || die "no album id in the response"
 [ -n "$ALBUM_ID" ] || die "no album id after admin submission"
 
+# 4b. page content: a fresh (unrated) pick renders everywhere ------------------
+status="$(get "$BASE_URL/albums/$ALBUM_ID")"
+expect_status "$status" 200 "GET /albums/{id} for the fresh pick"
+grep -q "Kind of Blue" "$TMP_OUT" || die "album detail page hides an unrated album"
+grep -q "open.spotify.com/embed" "$TMP_OUT" || die "AlbumEmbed swallowed the Spotify iframe"
+status="$(get "$BASE_URL/")"
+grep -q 'aria-label="featured album"' "$TMP_OUT" && grep -q "Kind of Blue" "$TMP_OUT" || die "dashboard does not feature the fresh pick"
+say "✓ album detail + dashboard feature the fresh pick"
+
 # 5. B and C rate it (7 + 10 → avg 8.5) ----------------------------------------
 status="$(post -b "$JAR_B" -X PUT "$BASE_URL/api/ratings" -d '{"album_id":"'"$ALBUM_ID"'","score":7,"comment":"smoky"}')"
 expect_status "$status" 200 "B rates 7"
@@ -120,9 +129,23 @@ status="$(get "$BASE_URL/api/albums")"
 grep -q '"ratingCount":2' "$TMP_OUT" || die "rating count should stay 2 after the upsert"
 say "✓ upsert keeps one rating row per member"
 
+# 6b. a member who rated sees their score on the dashboard (regression:
+# the featured block used to crash with an undefined myRating) -----------
+status="$(get -b "$JAR_B" "$BASE_URL/")"
+grep -q "your score" "$TMP_OUT" || die "dashboard hides B's own rating"
+
 # 7. admin: settings + join-code lifecycle --------------------------------------
 status="$(post -b "$JAR_A" -X POST "$BASE_URL/api/admin/rotation/settings" -d '{"group_name":"Smoke Club"}')"
 expect_status "$status" 200 "admin updates the group name"
+
+# 7b. the admin page renders its sections (regression: once came out blank) ----
+status="$(get -b "$JAR_A" "$BASE_URL/admin")"
+expect_status "$status" 200 "GET /admin (admin session)"
+grep -q "weekly controls" "$TMP_OUT" && grep -q "audit log" "$TMP_OUT" || die "admin page rendered blank"
+status="$(get -b "$JAR_B" "$BASE_URL/admin")"
+expect_status "$status" 404 "GET /admin (member session → 404-style no-access page)"
+grep -q "club admins only" "$TMP_OUT" || die "member sees more than the no-access page"
+say "✓ admin page renders (full for admins, no-access for members)"
 status="$(post -b "$JAR_A" -X POST "$BASE_URL/api/admin/join-code")"
 expect_status "$status" 200 "admin rotates the join code"
 NEW_CODE="$(sed -n 's/.*"join_code":"\([^"]*\)".*/\1/p' "$TMP_OUT")"
