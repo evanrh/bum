@@ -13,7 +13,7 @@ instead of repeating it.
 |---|---|---|---|
 | T01 | [Database foundation](T01-database-foundation.md) | — | ✅ |
 | T02 | [Rotation queue](T02-rotation-engine.md) | T01 | ✅ |
-| T03 | [Auth & sessions](T03-auth-and-sessions.md) | T01, T02 | ⬜ |
+| T03 | [Auth & sessions](T03-auth-and-sessions.md) | T01, T02 | ✅ |
 | T04 | [Albums & ratings](T04-albums-and-ratings.md) | T01, T02, T03 | ⬜ |
 | T05 | [Jobs](T05-jobs.md) | T01, T02 | ⬜ |
 | T06 | [Pages & islands](T06-pages-and-islands.md) | T01–T04 | ⬜ |
