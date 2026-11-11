@@ -17,11 +17,14 @@ delegation protocol.
 3. **PR when the work is done.** Acceptance criteria checked, and
    `npm test`, `npm run test:coverage`, `npm run typecheck` and
    `npm run build` all green → open a PR to `main` that summarizes what
-   shipped plus any ticket *Deviations & notes* updates. Merging the PR
-   is the end of the branch.
+   shipped plus any ticket *Deviations & notes* updates.
+   **The agent opens PRs only — it never merges them.** Once the PR is
+   open, the agent's work on that branch is done; merging is the owner's
+   review call.
 4. **One ticket per branch per agent run** (see "Delegation protocol"
    in `plans/README.md`). Dependent work stacks: branch off the branch
-   you depend on and merge the PRs in dependency order.
+   you depend on and open the dependency PRs first — the owner merges
+   them **in dependency order** before the dependent PR's review.
 5. **Commit prefixes match the branch's ticket**: `feat(T02): …`,
    `fix(T06): …`, `docs: …` for plan/README-only changes.
 
