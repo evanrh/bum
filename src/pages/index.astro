@@ -124,10 +124,12 @@ const board = await leaderboard(db, 5);
               user === null ? (
                 <p class="text-sm text-zinc-500">log in to rate — <a class="underline" href="/login">log in</a></p>
               ) : myRating ? (
-                <p class="text-sm text-amber-400">
-                  your score: {myRating.score / 2}★
-                  <a class="ml-1 underline" href={`/albums/${featured.id}`}>edit on the album page</a>
-                </p>
+                <RatingWidget
+                  client:visible
+                  albumId={featured.id}
+                  initialScore={myRating.score}
+                  initialComment={myRating.comment}
+                />
               ) : (
                 <RatingWidget client:visible albumId={featured.id} />
               )
