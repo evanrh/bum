@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { eq } from 'drizzle-orm';
+
 import * as albumsRepo from '../../src/db/repos/albums.ts';
 import * as auditRepo from '../../src/db/repos/audit.ts';
 import * as ratingsRepo from '../../src/db/repos/ratings.ts';
 import * as settingsRepo from '../../src/db/repos/settings.ts';
 import * as usersRepo from '../../src/db/repos/users.ts';
 import type { Db } from '../../src/db/index.ts';
+import { users } from '../../src/db/schema.ts';
 import {
   deleteAlbum,
   listAudit,
@@ -112,6 +115,54 @@ describe('user actions', () => {
     const lastAdmin = await userAction(db, admin, members.bob.id, { action: 'demote' });
     expect(lastAdmin.status).toBe(409);
     expect((await lastAdmin.json()).error).toBe('you cannot demote the last admin');
+  });
+
+  describe('original admin protection (issue #15)', () => {
+    /** Fixture users are created without the flag; flip it like the migration would. */
+    const flagOriginal = (id: number): void => {
+      db.update(users).set({ isOriginalAdmin: true }).where(eq(users.id, id)).run();
+    };
+
+    it('blocks demoting the original admin — by another admin or by themselves', async () => {
+      await flagOriginal(members.admin.id);
+      await usersRepo.setUserAdmin(db, members.carol.id, true);
+
+      const byAnother = await userAction(db, await fullUser(members.carol), members.admin.id, { action: 'demote' });
+      expect(byAnother.status).toBe(409);
+      expect((await byAnother.json()).error).toBe('the original admin cannot be demoted');
+      expect((await usersRepo.getUserById(db, members.admin.id))?.isAdmin).toBe(true);
+
+      const bySelf = await userAction(db, admin, members.admin.id, { action: 'demote' });
+      expect(bySelf.status).toBe(409);
+      expect((await bySelf.json()).error).toBe('the original admin cannot be demoted');
+
+      // Non-original admins demote exactly as before.
+      expect((await userAction(db, admin, members.carol.id, { action: 'demote' })).status).toBe(200);
+      expect((await usersRepo.getUserById(db, members.carol.id))?.isAdmin).toBe(false);
+    });
+
+    it('the original guard fires even when they are the last admin (message specificity)', async () => {
+      await flagOriginal(members.admin.id);
+      const lastAdmin = await userAction(db, admin, members.admin.id, { action: 'demote' });
+      expect(lastAdmin.status).toBe(409);
+      expect((await lastAdmin.json()).error).toBe('the original admin cannot be demoted');
+      expect((await usersRepo.getUserById(db, members.admin.id))?.isAdmin).toBe(true);
+    });
+
+    it('the flag rides along in roster and action payloads', async () => {
+      await flagOriginal(members.admin.id);
+      const rosterBody = JSON.parse(
+        await (await listUsers(db, admin)).text(),
+      ) as { users: Array<{ id: number; isOriginalAdmin: boolean }> };
+      expect(rosterBody.users.find((row) => row.id === members.admin.id)?.isOriginalAdmin).toBe(true);
+      expect(rosterBody.users.find((row) => row.id === members.bob.id)?.isOriginalAdmin).toBe(false);
+
+      const promoted = JSON.parse(
+        await (await userAction(db, admin, members.bob.id, { action: 'promote' })).text(),
+      ) as { user: { id: number; isOriginalAdmin: boolean } };
+      expect(promoted.user.id).toBe(members.bob.id);
+      expect(promoted.user.isOriginalAdmin).toBe(false);
+    });
   });
 
   it('deactivate removes from the queue (invariant), kills their sessions, audits it', async () => {

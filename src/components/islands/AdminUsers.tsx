@@ -5,6 +5,7 @@ export type AdminUserRow = {
   username: string;
   displayName: string;
   isAdmin: boolean;
+  isOriginalAdmin: boolean;
   isActive: boolean;
   joinedAt: number;
   submissionCount: number;
@@ -71,14 +72,27 @@ export function AdminUsers({ users: initial }: { users: AdminUserRow[] }) {
               <td className="px-4 py-3 text-zinc-400">{user.queuePosition ?? '—'}</td>
               <td className="px-4 py-3 text-zinc-400">{user.submissionCount}</td>
               <td className="px-4 py-3 text-zinc-400">{user.ratingCount}</td>
-              <td className="px-4 py-3 text-zinc-400">{user.isAdmin ? 'admin' : 'member'}</td>
+              <td className="px-4 py-3 text-zinc-400">
+                {user.isAdmin
+                  ? user.isOriginalAdmin ? 'original admin' : 'admin'
+                  : 'member'}
+              </td>
               <td className="px-4 py-3">
                 <div className="flex flex-wrap items-center gap-2">
                   {user.isAdmin ? (
-                    <button type="button" disabled={busyId !== null} onClick={() => void act(user, 'demote')}
-                      className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-zinc-500">
-                      demote
-                    </button>
+                    user.isOriginalAdmin ? (
+                      <span
+                        className="rounded border border-amber-500/50 px-2 py-1 text-xs text-amber-400"
+                        title="the first member ever — permanently admin"
+                      >
+                        super admin — locked
+                      </span>
+                    ) : (
+                      <button type="button" disabled={busyId !== null} onClick={() => void act(user, 'demote')}
+                        className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-zinc-500">
+                        demote
+                      </button>
+                    )
                   ) : (
                     <button type="button" disabled={busyId !== null} onClick={() => void act(user, 'promote')}
                       className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-zinc-500">

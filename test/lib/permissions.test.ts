@@ -10,6 +10,7 @@ const member: User = {
   passwordHash: 'h',
   displayName: 'Bob',
   isAdmin: false,
+  isOriginalAdmin: false,
   isActive: true,
   joinedAt: 0,
 };

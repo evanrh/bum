@@ -8,6 +8,12 @@ export type CreateUserInput = {
   passwordHash: string;
   displayName: string;
   isAdmin: boolean;
+  /**
+   * "Super admin" (issue #15) — set true exactly when this is the first user
+   * ever created. Explicit at every call site (signup, seed); the migration
+   * backfills MIN(id) for pre-existing rows.
+   */
+  isOriginalAdmin?: boolean;
 };
 
 /**
@@ -23,6 +29,7 @@ export async function createUser(db: Db, input: CreateUserInput, now: number): P
       passwordHash: input.passwordHash,
       displayName: input.displayName,
       isAdmin: input.isAdmin,
+      isOriginalAdmin: input.isOriginalAdmin ?? false,
       joinedAt: now,
     })
     .returning();

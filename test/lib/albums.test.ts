@@ -32,6 +32,7 @@ const submit = (user: SubmitUser, input: unknown, opts = {}) =>
       passwordHash: 'h',
       displayName: 'bob',
       isAdmin: false,
+      isOriginalAdmin: false,
       isActive: user.isActive ?? true,
       joinedAt: 0,
     },

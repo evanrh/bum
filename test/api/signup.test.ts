@@ -66,6 +66,8 @@ describe('POST /api/signup', () => {
 
     const stored = await usersRepo.getUserByUsername(db, profile.username);
     expect(stored).toBeDefined();
+    // Issue #15: the first user ever created carries the permanent flag.
+    expect(stored!.isOriginalAdmin).toBe(true);
     expect(await settingsRepo.getRotation(db)).toEqual([stored!.id]);
   });
 
@@ -74,8 +76,12 @@ describe('POST /api/signup', () => {
     const second = await signup(jsonRequest(validSignup()), db, { rateLimiter: limiter() });
     expect(first.status).toBe(201);
     expect(second.status).toBe(201);
-    expect(((await second.json()) as { isAdmin: boolean }).isAdmin).toBe(false);
+    const secondProfile = (await second.json()) as { id: number; isAdmin: boolean };
+    expect(secondProfile.isAdmin).toBe(false);
     expect((await settingsRepo.getRotation(db))).toHaveLength(2);
+
+    // Only the first user ever gets the permanent flag (issue #15).
+    expect((await usersRepo.getUserById(db, secondProfile.id))?.isOriginalAdmin).toBe(false);
   });
 
   it('rejects duplicate usernames case-insensitively with 409', async () => {

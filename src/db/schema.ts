@@ -52,6 +52,14 @@ export const users = sqliteTable(
     passwordHash: text('password_hash').notNull(),
     displayName: text('display_name').notNull(),
     isAdmin: integer('is_admin', { mode: 'boolean' }).notNull().default(false),
+    /**
+     * "Super admin" state (issue #15): the first user ever created. Set at
+     * signup (and backfilled from MIN(id) for pre-existing deployments);
+     * the demote endpoint rejects any attempt to remove it.
+     */
+    isOriginalAdmin: integer('is_original_admin', { mode: 'boolean' })
+      .notNull()
+      .default(false),
     /** Soft "deletion": history is kept, login is blocked. */
     isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
     joinedAt: integer('joined_at').notNull(),
@@ -63,6 +71,7 @@ export const users = sqliteTable(
       sql`lower(${t.username})`,
     ),
     check('users_is_admin_bool', sql`${t.isAdmin} IN (0, 1)`),
+    check('users_is_original_admin_bool', sql`${t.isOriginalAdmin} IN (0, 1)`),
     check('users_is_active_bool', sql`${t.isActive} IN (0, 1)`),
   ],
 );

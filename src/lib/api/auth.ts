@@ -77,14 +77,17 @@ export async function signup(request: Request, db: Db, opts: RateLimitOpts = {})
       throw new ApiError(409, 'username already taken');
     }
 
-    const isAdmin = (await usersRepo.countUsers(db)) === 0;
+    const firstUserEver = (await usersRepo.countUsers(db)) === 0;
     const user = await usersRepo.createUser(
       db,
       {
         username: input.username,
         passwordHash: await hashPassword(input.password),
         displayName: input.display_name,
-        isAdmin,
+        isAdmin: firstUserEver,
+        // Issue #15: the first user ever created is the permanent "original
+        // admin" — server-side demote of the flag stays rejected, forever.
+        isOriginalAdmin: firstUserEver,
       },
       now(),
     );

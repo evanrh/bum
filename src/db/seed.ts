@@ -77,7 +77,7 @@ async function seedFresh(db: Db): Promise<SeedResult> {
 
   const now = Date.now();
   const members: Record<string, { id: number }> = {};
-  for (const cred of credentials) {
+  for (const [index, cred] of credentials.entries()) {
     const user = await usersRepo.createUser(
       db,
       {
@@ -85,6 +85,9 @@ async function seedFresh(db: Db): Promise<SeedResult> {
         passwordHash: bcrypt.hashSync(cred.password, BCRYPT_COST),
         displayName: cred.displayName,
         isAdmin: cred.isAdmin,
+        // The credentials head is the first user ever created → original
+        // admin (issue #15).
+        isOriginalAdmin: index === 0,
       },
       now,
     );

@@ -90,6 +90,7 @@ users
   password_hash TEXT NOT NULL
   display_name TEXT NOT NULL                    -- 1-64 chars
   is_admin INTEGER NOT NULL DEFAULT 0
+  is_original_admin INTEGER NOT NULL DEFAULT 0  -- first user ever (issue #15): cannot be demoted
   is_active INTEGER NOT NULL DEFAULT 1          -- soft "deletion"
   joined_at INTEGER NOT NULL
 
@@ -166,8 +167,11 @@ always Mondays.
   built-in session feature is disabled in `astro.config.mjs`
   (`session: false`) — we roll our own.
 - Signup requires the join code (bcrypt-verified) while
-  `joining_enabled = 1`. The **first user ever created becomes admin**.
-  The plaintext join code is only shown at generation time.
+  `joining_enabled = 1`. The **first user ever created becomes admin** —
+  and stays so permanently: that row is flagged `is_original_admin`
+  (issue #15; the migration backfills existing deployments from `MIN(id)`)
+  and the demote endpoint rejects it, whoever acts. The plaintext join
+  code is only shown at generation time.
 - Passwords: bcrypt cost 12. Login rate limit: in-memory, 10 attempts per
   IP per 15 minutes (restart resets it; acceptable).
 - Mutation endpoints (`POST`/`PUT`/`DELETE`) verify `Origin`/`Referer`

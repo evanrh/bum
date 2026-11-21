@@ -32,6 +32,7 @@ const safeUser = (user: User): Record<string, unknown> => ({
   username: user.username,
   displayName: user.displayName,
   isAdmin: user.isAdmin,
+  isOriginalAdmin: user.isOriginalAdmin,
   isActive: user.isActive,
   joinedAt: user.joinedAt,
 });
@@ -124,6 +125,9 @@ export async function userAction(
     }
     if (input.action === 'demote') {
       if (!target.isAdmin) throw new ApiError(409, 'user is not an admin');
+      // Issue #15: the first user ever created is the permanent original
+      // admin — no actor (other admin or themselves) may remove it.
+      if (target.isOriginalAdmin) throw new ApiError(409, 'the original admin cannot be demoted');
       if ((await usersRepo.listAllUsers(db)).filter((candidate) => candidate.isAdmin).length <= 1) {
         throw new ApiError(409, 'you cannot demote the last admin');
       }

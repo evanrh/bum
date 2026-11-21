@@ -35,6 +35,12 @@ describe('seed script', () => {
     expect(result?.joinCode).toBe('bumseed');
     expect(result?.users.map((u) => u.username)).toEqual(['admin', 'bob', 'carol', 'dave']);
     expect(result?.users.find((u) => u.username === 'admin')?.isAdmin).toBe(true);
+    // The seeded admin is the first user ever created → original admin (#15);
+    // result.users is the CLI projection, so assert on stored rows.
+    const seededAdmin = await usersRepo.getUserByUsername(db, 'admin');
+    expect(seededAdmin?.isOriginalAdmin).toBe(true);
+    expect(seededAdmin?.isAdmin).toBe(true);
+    expect((await usersRepo.getUserByUsername(db, 'bob'))?.isOriginalAdmin).toBe(false);
     expect(result?.albums).toHaveLength(2);
     expect(result?.ratingCount).toBe(7);
     expect(await usersRepo.countUsers(db)).toBe(4);

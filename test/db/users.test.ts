@@ -17,6 +17,14 @@ describe('users repo', () => {
     expect(b.joinedAt).toBe(200);
     // Rotation order lives in the settings queue, not on the row.
     expect('rotationOrder' in a).toBe(false);
+    // The original-admin flag defaults off and must be set explicitly (#15).
+    expect(a.isOriginalAdmin).toBe(false);
+    const flagged = await usersRepo.createUser(
+      db,
+      { username: 'carla', passwordHash: hash('x'), displayName: 'C', isAdmin: true, isOriginalAdmin: true },
+      300,
+    );
+    expect(flagged.isOriginalAdmin).toBe(true);
   });
 
   it('rejects duplicate usernames case-insensitively', async () => {
