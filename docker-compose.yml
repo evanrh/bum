@@ -12,6 +12,24 @@ services:
     volumes:
       - ./data:/data
     restart: "no"
+  covers:
+    build: .
+    # One-shot (issue #27): reconciles cover art for rows inserted while the
+    # Spotify oEmbed endpoint was broken (#14). Idempotent — exits
+    # immediately when nothing is missing — so it is safe on every up.
+    # Network failures exit 1 but never block the web service (web depends
+    # only on migrate).
+    entrypoint:
+      - node
+      - dist/jobs/backfill-covers.mjs
+    environment:
+      DATABASE_URL: /data/bum.db
+    volumes:
+      - ./data:/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
   web:
     build: .
     environment:

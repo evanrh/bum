@@ -240,8 +240,10 @@ always Mondays.
   2026-11 and broke covers, issue #14 — 5s timeout) and store
   `thumbnail_url` as `cover_url`; with only a `youtube_id`, use
   `https://i.ytimg.com/vi/{id}/hqdefault.jpg`. Resolution runs at album
-  insert; `npm run covers:backfill` (Docker: `dist/jobs/backfill-covers.mjs`)
-  re-runs the same semantics for rows inserted without a cover. Failure is
+  insert; `npm run covers:backfill` (bundled as
+  `dist/jobs/backfill-covers.mjs`) re-runs the same semantics for rows
+  inserted without a cover; the compose `covers` one-shot runs it on
+  every deploy so the live database self-heals (issue #27). Failure is
   non-fatal: `cover_url` stays null and the UI shows a gradient placeholder.
 
 ## Conventions
