@@ -1,5 +1,6 @@
 ---
 import StarDisplay from './StarDisplay.astro';
+import { scoreStars } from '../lib/scale.ts';
 
 interface Props {
   id: string;
@@ -32,7 +33,7 @@ const { id, title, artist, coverUrl, submitterName, weekStart, avgScore, ratingC
     <p class="mt-1 text-xs text-zinc-500">week of {weekStart} — {submitterName}</p>
     <div class="mt-2 flex items-center gap-2">
       <StarDisplay score10={avgScore} size="text-sm" />
-      <span class="text-xs text-zinc-400">{avgScore !== null ? avgScore : '—'}</span>
+      <span class="text-xs text-zinc-400">{scoreStars(avgScore)}</span>
       <span class="text-xs text-zinc-500">({ratingCount})</span>
     </div>
   </div>
