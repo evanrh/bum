@@ -33,6 +33,7 @@ const submit = (user: SubmitUser, input: unknown, opts = {}) =>
       displayName: 'bob',
       isAdmin: false,
       isOriginalAdmin: false,
+      autoBacklog: true,
       isActive: user.isActive ?? true,
       joinedAt: 0,
     },

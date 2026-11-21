@@ -1,0 +1,38 @@
+---
+import Base from '../layouts/Base.astro';
+import { BacklogManager } from '../components/islands/BacklogManager.tsx';
+import { getDb } from '../db/index.ts';
+import * as backlogRepo from '../db/repos/backlog.ts';
+import * as usersRepo from '../db/repos/users.ts';
+
+// Backlog is member-private; logged out → the login page.
+const user = Astro.locals.user;
+if (user === null) return Astro.redirect('/login');
+
+const db = getDb();
+const userRow = await usersRepo.getUserById(db, user.id);
+const items = await backlogRepo.listBacklogItems(db, user.id);
+const autoBacklog = userRow?.autoBacklog ?? false;
+---
+
+<Base title={userRow ? `${userRow.displayName}'s backlog — Bum` : 'Backlog — Bum'}>
+  <h1 class="mb-1 text-lg font-semibold text-zinc-100">Your album backlog</h1>
+  <p class="mb-5 text-sm text-zinc-400">
+    queue albums ahead of your turn — the first item goes up automatically when your week starts
+    (or stays put until you submit by hand if you turn auto-queueing off).
+  </p>
+  <BacklogManager
+    client:load
+    autoBacklog={autoBacklog}
+    items={items.map((item) => ({
+      id: item.id,
+      title: item.title,
+      artist: item.artist,
+      year: item.year,
+      spotifyId: item.spotifyId,
+      youtubeId: item.youtubeId,
+      coverUrl: item.coverUrl,
+      note: item.note,
+    }))}
+  />
+</Base>

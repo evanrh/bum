@@ -22,6 +22,14 @@
       "tag": "0002_original_admin",
       "breakpoints": true,
       "hash": "c69b43c00abff3eee57de7c7b6c26be3ae696610be982e1ca165bbdd6428e5bf"
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1795241513563,
+      "tag": "0003_backlog",
+      "breakpoints": true,
+      "hash": "a6beb4d38efcbacece75c9f29fdae5900c8477b99cc8a51fb537a39661060680"
     }
   ]
 }

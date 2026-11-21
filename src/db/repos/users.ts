@@ -97,6 +97,16 @@ export async function setUserActive(db: Db, id: number, isActive: boolean): Prom
   return user;
 }
 
+/** Issue #18: the per-member backlog auto-queue toggle. */
+export async function setAutoBacklog(db: Db, id: number, autoBacklog: boolean): Promise<User> {
+  const [user] = await db
+    .update(users)
+    .set({ autoBacklog })
+    .where(eq(users.id, id))
+    .returning();
+  return user;
+}
+
 export async function setUserPassword(db: Db, id: number, passwordHash: string): Promise<User> {
   const [user] = await db
     .update(users)

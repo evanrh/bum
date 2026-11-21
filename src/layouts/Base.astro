@@ -51,6 +51,7 @@ const canSubmit = user !== null && user.isActive && submitLink.eligible;
         <nav class="mt-4 flex gap-4 text-sm" aria-label="main">
           <a href="/" class="text-zinc-300 hover:text-white">dashboard</a>
           <a href="/albums" class="text-zinc-300 hover:text-white">albums</a>
+          {user !== null ? (<a href="/backlog" class="text-zinc-300 hover:text-white">backlog</a>) : null}
           {
             canSubmit && (
               <a href="/submit" class="font-medium text-amber-400 hover:text-amber-300">

@@ -139,9 +139,10 @@ describe('rotation-model migration (0001)', () => {
   it('audit repo works against the migrated schema (system + admin actors)', async () => {
     stageThrough('0000_nostalgic_ozymandias');
     stageThrough('0001_curved_cloak');
-    // The repos (src/db) already assume the current users shape — issue #15
-    // added is_original_admin in 0002, which the INSERT needs staged too.
+    // The repos (src/db) already assume the current users/backlog shape — the
+    // #15 and #18 migrations carry those columns; the INSERT needs them staged.
     stageThrough('0002_original_admin');
+    stageThrough('0003_backlog');
     applyMigrations(db);
 
     const bob = await usersRepo.createUser(

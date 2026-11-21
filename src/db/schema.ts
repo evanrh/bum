@@ -60,6 +60,12 @@ export const users = sqliteTable(
     isOriginalAdmin: integer('is_original_admin', { mode: 'boolean' })
       .notNull()
       .default(false),
+    /**
+     * Issue #18: when the member's rotation week starts and auto-queueing is
+     * on, their first backlog item becomes the week's album automatically.
+     * Enabled by default.
+     */
+    autoBacklog: integer('auto_backlog', { mode: 'boolean' }).notNull().default(true),
     /** Soft "deletion": history is kept, login is blocked. */
     isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
     joinedAt: integer('joined_at').notNull(),
@@ -73,6 +79,7 @@ export const users = sqliteTable(
     check('users_is_admin_bool', sql`${t.isAdmin} IN (0, 1)`),
     check('users_is_original_admin_bool', sql`${t.isOriginalAdmin} IN (0, 1)`),
     check('users_is_active_bool', sql`${t.isActive} IN (0, 1)`),
+    check('users_auto_backlog_bool', sql`${t.autoBacklog} IN (0, 1)`),
   ],
 );
 
@@ -96,6 +103,37 @@ export const albums = sqliteTable(
     note: text('note'),
   },
   (t) => [index('albums_submitted_by_idx').on(t.submittedBy)],
+);
+
+export const backlogItems = sqliteTable(
+  'backlog_items',
+  {
+    /** Internal unique id: uuid v4 (crypto.randomUUID). */
+    id: text('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id),
+    /** 1-200 chars (same limits as albums). */
+    title: text('title').notNull(),
+    artist: text('artist').notNull(),
+    /** Optional, 1900-2100. */
+    year: integer('year'),
+    /** Parsed from a pasted URL at add time (same as /submit). */
+    spotifyId: text('spotify_id'),
+    youtubeId: text('youtube_id'),
+    /** Best-effort resolved at add time; null → UI placeholder. */
+    coverUrl: text('cover_url'),
+    /** Optional, ≤ 1000 chars. */
+    note: text('note'),
+    /** Order within the member's backlog: lower = next to be used. */
+    position: integer('position').notNull(),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (t) => [
+    index('backlog_user_position_idx').on(t.userId, t.position),
+    check('backlog_year_range', sql`${t.year} IS NULL OR (${t.year} BETWEEN 1900 AND 2100)`),
+  ],
 );
 
 export const ratings = sqliteTable(
@@ -150,6 +188,8 @@ export type User = InferSelectModel<typeof users>;
 export type UserInsert = InferInsertModel<typeof users>;
 export type Album = InferSelectModel<typeof albums>;
 export type AlbumInsert = InferInsertModel<typeof albums>;
+export type BacklogItem = InferSelectModel<typeof backlogItems>;
+export type BacklogItemInsert = InferInsertModel<typeof backlogItems>;
 export type Rating = InferSelectModel<typeof ratings>;
 export type RatingInsert = InferInsertModel<typeof ratings>;
 export type AuditLog = InferSelectModel<typeof auditLog>;

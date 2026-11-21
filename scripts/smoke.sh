@@ -177,6 +177,32 @@ grep -q "\"picker\":{\"id\":$OVERRIDE_TARGET" "$TMP_OUT" || die "override did no
 EXPECTED_QUEUE="$OVERRIDE_TARGET,$(echo "$SKIP_QUEUE" | sed 's/,[^,]*$//')"
 grep -q "\"queue\":\[$EXPECTED_QUEUE\]" "$TMP_OUT" || die "override rotated the order incorrectly (expected $EXPECTED_QUEUE)"
 
+# 8c. member backlog (issue #18): queue two albums, reorder, toggle the
+# auto-queue off, remove one. The advance-driven auto-submit is covered by
+# the unit tests; the endpoints are the browser-reachable surface.
+status="$(post -b "$JAR_B" -X POST "$BASE_URL/api/backlog" -d '{"title":"Backlog Alpha","artist":"Artist One"}')"
+expect_status "$status" 201 "B queues Backlog Alpha"
+FIRST_ID="$(extract_id)"
+status="$(post -b "$JAR_B" -X POST "$BASE_URL/api/backlog" -d '{"title":"Backlog Beta","artist":"Artist Two"}')"
+expect_status "$status" 201 "B queues Backlog Beta"
+SECOND_ID="$(extract_id)"
+status="$(post -b "$JAR_B" -X POST "$BASE_URL/api/backlog/order" -d '{"ids":["'"$SECOND_ID"'","'"$FIRST_ID"'"]}')"
+expect_status "$status" 200 "B reorders the backlog (Beta first)"
+status="$(get -b "$JAR_B" "$BASE_URL/api/backlog")"
+grep -q "\"title\":\"Backlog Beta\"" "$TMP_OUT" || die "reordered backlog head is not Beta"
+status="$(post -b "$JAR_B" -X POST "$BASE_URL/api/backlog/auto-queue" -d '{"enabled":false}')"
+expect_status "$status" 200 "B disables auto-queueing (issue #18)"
+grep -q '"autoBacklog":false' "$TMP_OUT" || die "auto-queue toggle did not report off"
+status="$(post -b "$JAR_B" -X DELETE "$BASE_URL/api/backlog/$SECOND_ID")"
+expect_status "$status" 204 "B removes a queued album"
+status="$(get -b "$JAR_B" "$BASE_URL/api/backlog")"
+grep -q '"title":"Backlog Alpha"' "$TMP_OUT" || die "remaining backlog item vanished"
+grep -q 'Backlog Beta' "$TMP_OUT" && die "removed backlog item still listed"
+status="$(get -b "$JAR_B" "$BASE_URL/backlog")"
+grep -q "your queue" "$TMP_OUT" && grep -q "Backlog Alpha" "$TMP_OUT" || die "the backlog page does not render the member queue"
+status="$(get "$BASE_URL/api/backlog")"
+expect_status "$status" 401 "backlog is member-private (anonymous → 401)"
+
 # 9. logout + anonymous access ---------------------------------------------------
 status="$(post -b "$JAR_A" -X POST "$BASE_URL/api/logout")"
 expect_status "$status" 204 "admin logs out"

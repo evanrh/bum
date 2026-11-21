@@ -91,8 +91,19 @@ users
   display_name TEXT NOT NULL                    -- 1-64 chars
   is_admin INTEGER NOT NULL DEFAULT 0
   is_original_admin INTEGER NOT NULL DEFAULT 0  -- first user ever (issue #15): cannot be demoted
+  auto_backlog INTEGER NOT NULL DEFAULT 1       -- issue #18: use the backlog head when their week starts
   is_active INTEGER NOT NULL DEFAULT 1          -- soft "deletion"
   joined_at INTEGER NOT NULL
+
+backlog_items (issue #18 — one member's queue of prepared submissions)
+  id TEXT PK                                    -- uuid v4
+  user_id INTEGER NOT NULL REFERENCES users(id)
+  title TEXT NOT NULL                           -- 1-200 (same limits as albums)
+  artist TEXT NOT NULL                          -- 1-200
+  year INTEGER                                  -- optional, 1900-2100
+  spotify_id TEXT / youtube_id TEXT / cover_url TEXT / note TEXT
+  position INTEGER NOT NULL                     -- lower = next up (member-scoped order)
+  created_at, updated_at INTEGER NOT NULL
 
 albums
   id TEXT PK                                    -- uuid v4 (crypto.randomUUID)
@@ -156,6 +167,16 @@ always Mondays.
   original order. Selecting the current head is a confirmed no-op.
   Same audit + warning semantics as the skip; a member outside the
   rotation is a 409.
+- **Backlog auto-queue (issue #18)** — members can queue albums ahead of
+  their own weeks (`/backlog`: add, reorder, remove; per-member
+  `auto_backlog` toggle, on by default). When a member's turn comes up —
+  the weekly advance **and** admin skip/override — the first queued item
+  becomes that week's submission automatically (same validation/cover
+  resolution as /submit; the item leaves the backlog; audited as system
+  action `backlog.auto_submit`). A taken week is never overwritten; with
+  the toggle off nothing happens and the queue is untouched. Multi-week
+  catch-up advances fill only the current week, never skipped-outage
+  weeks.
 - **Membership changes** — signup appends the new user's id to the back
   of the queue (T03). Admin reorder rewrites the whole array (T07).
   Deactivating a member removes their id from the queue wherever it

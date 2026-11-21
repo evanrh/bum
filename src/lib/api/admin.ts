@@ -10,6 +10,7 @@ import * as settingsRepo from '../../db/repos/settings.ts';
 import * as usersRepo from '../../db/repos/users.ts';
 import type { User } from '../../db/schema.ts';
 import { hashPassword } from '../auth.ts';
+import { autoSubmitBacklogHead } from '../backlog.ts';
 import { sessionStore } from '../sessions.ts';
 import { ApiError, jsonError } from '../errors.ts';
 import { requireAdmin } from '../permissions.ts';
@@ -295,6 +296,9 @@ export async function skipCurrent(db: Db, admin: User | null, now: number = Date
 
     const nextQueue = await settingsRepo.getRotation(db);
     const nextPicker = nextQueue[0] !== undefined ? await usersRepo.getUserById(db, nextQueue[0]) : undefined;
+    // The new head's turn came up — issue #18: their backlog head may be used.
+    // Guarded internally (taken weeks are left alone).
+    await autoSubmitBacklogHead(db, nextQueue[0] ?? null, week, { now });
     return new Response(
       JSON.stringify({
         queue: nextQueue,
@@ -367,6 +371,9 @@ export async function selectPicker(
     });
 
     const submittedAlbum = await albumsRepo.getAlbumByWeekStart(db, week);
+    // The named member's turn came up — issue #18: their queue may fill the
+    // week. Guarded internally (taken weeks are left alone).
+    await autoSubmitBacklogHead(db, target.id, week, { now });
     let warning: string | undefined;
     if (submittedAlbum) {
       const submitter = await usersRepo.getUserById(db, submittedAlbum.submittedBy);

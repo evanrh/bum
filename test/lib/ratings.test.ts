@@ -19,6 +19,7 @@ const asUser = (fixture: FixtureMembers['bob']) => ({
   displayName: 'fixture',
   isAdmin: false,
   isOriginalAdmin: false,
+  autoBacklog: true,
   isActive: true,
   joinedAt: 0,
 });

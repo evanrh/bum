@@ -11,6 +11,7 @@ const member: User = {
   displayName: 'Bob',
   isAdmin: false,
   isOriginalAdmin: false,
+  autoBacklog: true,
   isActive: true,
   joinedAt: 0,
 };
