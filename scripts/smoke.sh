@@ -129,10 +129,11 @@ status="$(get "$BASE_URL/api/albums")"
 grep -q '"ratingCount":2' "$TMP_OUT" || die "rating count should stay 2 after the upsert"
 say "✓ upsert keeps one rating row per member"
 
-# 6b. a member who rated sees their score on the dashboard (regression:
-# the featured block used to crash with an undefined myRating) -----------
-status="$(get -b "$JAR_B" "$BASE_URL/")"
-grep -q "your score" "$TMP_OUT" || die "dashboard hides B's own rating"
+  # 6b. a member who rated sees their score on the dashboard (regression:
+  # the featured block used to crash with an undefined myRating). Since #13
+  # the widget renders read-only server-side — check its view-mode marker.
+  status="$(get -b "$JAR_B" "$BASE_URL/")"
+  grep -q "rating-readonly" "$TMP_OUT" || die "dashboard hides B's own rating"
 
 # 7. admin: settings + join-code lifecycle --------------------------------------
 status="$(post -b "$JAR_A" -X POST "$BASE_URL/api/admin/rotation/settings" -d '{"group_name":"Smoke Club"}')"
@@ -170,5 +171,17 @@ status="$(get "$BASE_URL/api/albums")"
 expect_status "$status" 200 "anonymous read stays public"
 status="$(post -X PUT "$BASE_URL/api/ratings" -d '{"album_id":"anything","score":5}')"
 expect_status "$status" 401 "anonymous mutation → 401"
+
+# 10. browser-form regression (issue #16): real <form> posts are urlencoded and
+# go through Astro's origin check — the JSON posts above bypass it. A login +
+# logout in the exact shape the header buttons fire must still work.
+status="$(curl -s -o "$TMP_OUT" -w "%{http_code}" -X POST "$BASE_URL/api/login" \
+  -H "origin: $BASE_URL" -H "content-type: application/x-www-form-urlencoded" \
+  -c "$JAR_B" --data-urlencode "username=bmember" --data-urlencode "password=$PICKER_PW")"
+expect_status "$status" 303 "urlencoded login (browser form shape → redirect)"
+status="$(curl -s -o "$TMP_OUT" -w "%{http_code}" -X POST "$BASE_URL/api/logout" \
+  -H "origin: $BASE_URL" -H "content-type: application/x-www-form-urlencoded" \
+  -b "$JAR_B")"
+expect_status "$status" 303 "urlencoded logout (browser form shape, issue #16)"
 
 say "ALL CHECKS PASSED ($BASE_URL)"

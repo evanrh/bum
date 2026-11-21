@@ -176,7 +176,13 @@ always Mondays.
   IP per 15 minutes (restart resets it; acceptable).
 - Mutation endpoints (`POST`/`PUT`/`DELETE`) verify `Origin`/`Referer`
   matches the request host when the header is present (CSRF guard for
-  cookie auth). `GET` is exempt.
+  cookie auth). `GET` is exempt. Astro's built-in CSRF layer
+  (`security.checkOrigin`, default-on since 5.12) is **disabled**
+  (issue #16): the node adapter synthesizes request URLs without the
+  real host/port unless allowedDomains is configured, so its
+  strict-equality origin check 403s every real browser `<form>` post.
+  The app-level guard in `src/middleware.ts` reads the actual `Host`
+  header and is the single source of truth.
 - Permissions: admins can do everything (any album/rating edit or delete,
   user management, rotation order + manual skip, join code). Members rate
   anything anytime and edit/delete **their own** rating; they submit only
