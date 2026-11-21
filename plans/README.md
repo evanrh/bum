@@ -20,6 +20,7 @@ instead of repeating it.
 | T07 | [Admin panel](T07-admin-panel.md) | T01–T05 | ✅ |
 | T08 | [Docker](T08-docker.md) | T01–T05 | ✅ |
 | T09 | [Integration pass](T09-integration-pass.md) | T01–T08 | ✅ |
+| T10 | [OpenGraph embeds](T10-opengraph-embeds.md) ([#31](https://github.com/evanrh/bum/issues/31)) | — | ⬜ |
 
 Status values: ⬜ not started · 🚧 in progress · ✅ done (all acceptance
 criteria checked).
@@ -28,9 +29,11 @@ criteria checked).
 
 1. **One ticket per agent run, on its own branch.** Pick the
    lowest-numbered ticket whose dependencies are ✅, branch off `main`
-   (`feat/t03-auth`, …), and only touch that branch. Docs/plan changes
-   get a `docs/…` branch. `main` moves via PR merges only — see
-   `AGENTS.md`.
+   and only touch that branch. Docs/plan changes get a `docs/…` branch.
+   `main` moves via PR merges only — see `AGENTS.md`. Post-launch
+   tickets (T10+) pair the T-number in `plans/` with a GitHub issue:
+   branches and commits use the issue number
+   (`feat/31-opengraph-embeds`, `feat(#31): …`).
 2. Read the ticket top to bottom, then implement. Do not start dependent
    work belonging to later tickets "while you're in there".
 3. Every ticket carries its own tests. The suite (`npm test`) and the build
@@ -67,6 +70,7 @@ criteria checked).
 | Language / runtime | TypeScript (strict, `erasableSyntaxOnly`), Node >= 24 |
 | Runtime TS execution | Node 24 native type-stripping — all intra-project imports include the `.ts` extension; no enums/namespaces/parameter properties |
 | Testing | Vitest + `@vitest/coverage-v8`; RTL for React islands; coverage ≥ 80% statements/lines/functions, ≥ 75% branches over `src/lib`, `src/db`, `src/jobs` (via `npm run test:coverage`) |
+| OG unfurls & site origin | `site:` in astro.config baked at build from a **required** `SITE_URL` env (build fails without it; Docker build ARG, compose `${SITE_URL:?}`). Absolute OG URLs derive from `Astro.site` only — never `Astro.url`'s origin (node adapter rewrite, issue #16). A favicon PNG doubles as the fallback `og:image` |
 
 ## Canonical data model
 
