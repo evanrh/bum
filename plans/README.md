@@ -1,13 +1,17 @@
-# Bum — implementation tickets
+# Bum — technical record
 
-This directory is the execution plan for the Bum app. Each ticket is a
-self-contained brief for one delegated agent run. `plans/README.md` is the
-**single source of truth** for technical decisions; tickets reference it
-instead of repeating it.
+The ticketing system used to live here as markdown files (one ticket =
+one brief = one delegated agent run). **As of 2026-11-21 it has been
+retired (issue #31): tickets now live as GitHub issues** — one issue =
+one branch = one PR, with acceptance criteria as checkboxes. The T01–T09
+files and their index below are kept as history.
 
-**Read this file in full before starting any ticket.**
+`plans/README.md` remains the **single source of truth for technical
+decisions** — locked decisions, the canonical data model, and
+conventions. Read the sections relevant to whatever you are changing;
+they bind every change.
 
-## Ticket index
+## Ticket index (historical — T01–T09 ran under the old markdown system)
 
 | # | Ticket | Depends on | Status |
 |---|---|---|---|
@@ -21,35 +25,31 @@ instead of repeating it.
 | T08 | [Docker](T08-docker.md) | T01–T05 | ✅ |
 | T09 | [Integration pass](T09-integration-pass.md) | T01–T08 | ✅ |
 
-Status values: ⬜ not started · 🚧 in progress · ✅ done (all acceptance
-criteria checked).
+## Workflow (issues, since 2026-11-21)
 
-## Delegation protocol
-
-1. **One ticket per agent run, on its own branch.** Pick the
-   lowest-numbered ticket whose dependencies are ✅, branch off `main`
-   (`feat/t03-auth`, …), and only touch that branch. Docs/plan changes
-   get a `docs/…` branch. `main` moves via PR merges only — see
-   `AGENTS.md`.
-2. Read the ticket top to bottom, then implement. Do not start dependent
-   work belonging to later tickets "while you're in there".
-3. Every ticket carries its own tests. The suite (`npm test`) and the build
-   (`npm run build && npm run typecheck`) must pass before the commit.
-4. Commit format: `feat(T03): auth & sessions` (or `fix(T03): …`,
-   `refactor(T03): …`). One ticket may produce a few commits; prefix each
-   with its ticket number.
-5. When acceptance criteria are all met: update the ticket's `Status:` line
-   and the index above (🚧 → ✅) **as part of the branch**, then open a PR
-   to `main` (see `AGENTS.md`) — agents open PRs, the owner merges them,
-   and merges are fast-forward only (`main` stays linear).
-   If work is genuinely
-   blocked, leave 🚧 and append a **Deviations & notes** section explaining
-   the blocker.
-6. **Never rewrite a completed ticket's requirements.** Clarifications and
-   discovered edge cases go into the ticket's *Deviations & notes* section
-   so later tickets and reviewers can see the history.
-7. If a ticket needs a new dependency, install it in that ticket and record
-   it in its *Deviations & notes* section.
+1. **One issue per agent run, on its own branch.** Branch off `main`
+   named after the issue (`feat/31-opengraph`, `fix/27-covers-self-heal`,
+   `docs/rotation-model`) and only touch that branch. Docs changes get a
+   `docs/…` branch. `main` moves via PR merges only — see `AGENTS.md`.
+2. Read the issue top to bottom, then implement. Do not start dependent
+   work belonging to later issues "while you're in there".
+3. Every issue carries its own tests. The suite (`npm test`) and the
+   build (`npm run build && npm run typecheck`) must pass before the
+   commit.
+4. Commit format: `feat(#31): opengraph embeds` (or `fix(#27): …` — the
+   number is the issue). One issue may produce a few commits; prefix
+   each with its issue number.
+5. When acceptance criteria are all met: tick the issue's checkboxes
+   **as part of the branch's PR prep**, then open a PR to `main`
+   (`Closes #N` — see `AGENTS.md`) — agents open PRs, the owner merges
+   them, and merges are fast-forward only (`main` stays linear). If
+   work is genuinely blocked, leave the boxes unticked and explain in a
+   PR/issue comment.
+6. **Never rewrite a closed issue's requirements.** Clarifications and
+   discovered edge cases go into a comment on the issue (or a new issue)
+   so reviewers can see the history.
+7. If an issue needs a new dependency, install it in that issue's run
+   and record it in the PR description.
 
 ## Locked technical decisions
 
@@ -67,6 +67,7 @@ criteria checked).
 | Language / runtime | TypeScript (strict, `erasableSyntaxOnly`), Node >= 24 |
 | Runtime TS execution | Node 24 native type-stripping — all intra-project imports include the `.ts` extension; no enums/namespaces/parameter properties |
 | Testing | Vitest + `@vitest/coverage-v8`; RTL for React islands; coverage ≥ 80% statements/lines/functions, ≥ 75% branches over `src/lib`, `src/db`, `src/jobs` (via `npm run test:coverage`) |
+| OG unfurls & site origin | `site:` in astro.config baked at build from a **required** `SITE_URL` env (build fails without it; Docker build ARG, compose `${SITE_URL:?}`). Absolute OG URLs derive from `Astro.site` only — never `Astro.url`'s origin (node adapter rewrite, issue #16). A favicon PNG doubles as the fallback `og:image` |
 
 ## Canonical data model
 
