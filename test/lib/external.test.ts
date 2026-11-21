@@ -111,7 +111,7 @@ describe('resolveCoverUrl', () => {
     const cover = await resolveCoverUrl({ spotifyId: okAlbumId }, fetchImpl as unknown as typeof fetch);
     expect(cover).toBe('https://example.com/cover.jpg');
     expect(fetchImpl).toHaveBeenCalledWith(
-      `https://open.spotify.com/oembed/?url=https://open.spotify.com/album/${okAlbumId}`,
+      `https://open.spotify.com/oembed?url=https://open.spotify.com/album/${okAlbumId}`,
       expect.anything(),
     );
   });

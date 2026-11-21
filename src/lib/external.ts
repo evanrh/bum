@@ -111,6 +111,13 @@ export const youtubeEmbedUrl = (id: string): string => `https://www.youtube-noco
 
 const SPOTIFY_OEMBED_TIMEOUT_MS = 5000;
 const youtubeThumbnail = (id: string): string => `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+/**
+ * Spotify's public oEmbed. NOTE: no trailing slash after /oembed — the
+ * trailing-slash path (/oembed/?url=…) has gone 404 (2026-11), breaking
+ * all cover resolution (issue #14); the no-slash form serves the JSON.
+ */
+export const spotifyOembedUrl = (albumId: string): string =>
+  `https://open.spotify.com/oembed?url=https://open.spotify.com/album/${albumId}`;
 
 /**
  * Best-effort cover art: with a Spotify id, hit the public oEmbed endpoint
@@ -124,10 +131,9 @@ export async function resolveCoverUrl(
 ): Promise<string | null> {
   if (ids.spotifyId) {
     try {
-      const response = await fetchImpl(
-        `https://open.spotify.com/oembed/?url=https://open.spotify.com/album/${ids.spotifyId}`,
-        { signal: AbortSignal.timeout(SPOTIFY_OEMBED_TIMEOUT_MS) },
-      );
+      const response = await fetchImpl(spotifyOembedUrl(ids.spotifyId), {
+        signal: AbortSignal.timeout(SPOTIFY_OEMBED_TIMEOUT_MS),
+      });
       if (!response.ok) return null;
       const json = (await response.json()) as { thumbnail_url?: unknown };
       return typeof json.thumbnail_url === 'string' ? json.thumbnail_url : null;

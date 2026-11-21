@@ -195,11 +195,14 @@ always Mondays.
 - Embeds (no API keys, no auth): Spotify
   `https://open.spotify.com/embed/album/{id}` (compact, 152px);
   YouTube `https://www.youtube-nocookie.com/embed/{id}` (16:9).
-- Cover art: with a `spotify_id`, fetch `https://open.spotify.com/oembed/?url=https://open.spotify.com/album/{id}`
-  (public oEmbed, 5s timeout) and store `thumbnail_url` as `cover_url`;
-  with only a `youtube_id`, use `https://i.ytimg.com/vi/{id}/hqdefault.jpg`.
-  Failure is non-fatal: `cover_url` stays null and the UI shows a gradient
-  placeholder.
+- Cover art: with a `spotify_id`, fetch `https://open.spotify.com/oembed?url=https://open.spotify.com/album/{id}`
+  (public oEmbed — **no trailing slash**: `/oembed/?url=…` gone 404 in
+  2026-11 and broke covers, issue #14 — 5s timeout) and store
+  `thumbnail_url` as `cover_url`; with only a `youtube_id`, use
+  `https://i.ytimg.com/vi/{id}/hqdefault.jpg`. Resolution runs at album
+  insert; `npm run covers:backfill` (Docker: `dist/jobs/backfill-covers.mjs`)
+  re-runs the same semantics for rows inserted without a cover. Failure is
+  non-fatal: `cover_url` stays null and the UI shows a gradient placeholder.
 
 ## Conventions
 

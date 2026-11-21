@@ -16,7 +16,8 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node src/db/migrate.ts",
-    "db:seed": "node src/db/seed.ts"
+    "db:seed": "node src/db/seed.ts",
+    "covers:backfill": "node src/jobs/backfill-covers.ts"
   },
   "dependencies": {
     "@astrojs/node": "^9.5.5",

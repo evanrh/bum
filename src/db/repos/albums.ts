@@ -1,4 +1,4 @@
-import { asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
+import { asc, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import { albums, ratings, type Album } from '../schema.ts';
 import type { Db } from '../index.ts';
@@ -86,6 +86,21 @@ export async function updateAlbum(
 export async function deleteAlbum(db: Db, id: string): Promise<boolean> {
   const result = await db.delete(albums).where(eq(albums.id, id));
   return Number(result.changes) > 0;
+}
+
+/**
+ * Albums with a null cover_url, oldest first — the cover backfill's
+ * queue. Only the identifier fields are needed to re-resolve.
+ */
+export async function listAlbumsWithoutCover(db: Db): Promise<
+  Array<Pick<Album, 'id' | 'title' | 'spotifyId' | 'youtubeId'>>
+> {
+  const rows = await db
+    .select({ id: albums.id, title: albums.title, spotifyId: albums.spotifyId, youtubeId: albums.youtubeId })
+    .from(albums)
+    .where(isNull(albums.coverUrl))
+    .orderBy(asc(albums.submittedAt));
+  return rows;
 }
 
 const albumColumns = {

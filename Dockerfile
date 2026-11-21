@@ -23,7 +23,10 @@ RUN ./node_modules/.bin/esbuild src/db/migrate.ts \
       --outfile=dist/jobs/migrate.mjs && \
     ./node_modules/.bin/esbuild src/jobs/run.ts \
       --bundle --platform=node --format=esm --packages=external --sourcemap \
-      --outfile=dist/jobs/run.mjs
+      --outfile=dist/jobs/run.mjs && \
+    ./node_modules/.bin/esbuild src/jobs/backfill-covers.ts \
+      --bundle --platform=node --format=esm --packages=external --sourcemap \
+      --outfile=dist/jobs/backfill-covers.mjs
 
 # ---- runtime: production deps only --------------------------------------
 FROM base AS runtime
