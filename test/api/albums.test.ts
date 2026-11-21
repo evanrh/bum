@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import * as albumsRepo from '../../src/db/repos/albums.ts';
 import * as ratingsRepo from '../../src/db/repos/ratings.ts';
@@ -14,6 +14,10 @@ const envBackup: { bootstrap?: string } = {};
 let db: Db;
 let members: FixtureMembers;
 let bobCookie: string;
+// Frozen clock: the POST /api/albums path calls Date.now() internally, and
+// the created album must land in this test's frozen week — the wall clock
+// advances past any hardcoded week (this broke when the real week turned
+// to 2026-11-16).
 const now = Date.UTC(2026, 10, 10, 15);
 
 const cookieRequest = (
@@ -45,6 +49,7 @@ const asLocals = (user: FixtureMembers['bob'], overrides: Partial<Record<string,
 beforeEach(async () => {
   envBackup.bootstrap = process.env.BOOTSTRAP_JOIN_CODE;
   process.env.BOOTSTRAP_JOIN_CODE = 'JOINCODE123';
+  vi.useFakeTimers({ now });
   db = makeDb();
   members = await seedMembers(db);
   await settingsRepo.setRotation(db, [members.bob.id, members.carol.id, members.dave.id, members.admin.id], now);
@@ -53,6 +58,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   sessionStore.clear();
   if (envBackup.bootstrap === undefined) delete process.env.BOOTSTRAP_JOIN_CODE;
   else process.env.BOOTSTRAP_JOIN_CODE = envBackup.bootstrap;
