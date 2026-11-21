@@ -17,10 +17,9 @@ interface Props {
 
 const { title = 'Bum', og = {} } = Astro.props;
 
-// The OG origin is the astro `site` (astro.config.mjs throws without
-// SITE_URL at build time) — never Astro.url, whose origin the node
-// adapter rewrites away (issue #16). The type is nullable, so fail
-// loudly here too if a build ever slipped past the config guard.
+// OG origins mint only from astro `site` — request origins are rewritten
+// by the node adapter (issue #16). The config makes `site` exist; the
+// type still says nullable, hence the throw.
 const site = Astro.site;
 if (!site) {
   throw new Error('[bum] astro `site` is unset — SITE_URL must be set at build time (issue #31)');
@@ -30,14 +29,11 @@ const origin = site.origin;
 const ogTitle = title;
 const ogDescription = og.description ?? FALLBACK_BLURB;
 const ogImageHref = ogImage({ coverUrl: og.image, origin });
-// Width/height/alt ride along only for the static default (the icon);
-// dynamic cover art arrives with unknown dimensions.
+// Dimensions/alt ride on the icon default only; covers arrive size-unknown.
 const staticIcon = og.image === undefined || og.image === null || og.image === '';
 const ogImageAlt = og.imageAlt ?? (staticIcon ? 'Bum logo' : undefined);
 const ogImageWidth = og.imageWidth ?? (staticIcon ? 512 : undefined);
 const ogImageHeight = og.imageHeight ?? (staticIcon ? 512 : undefined);
-// Canonical URL: request pathname joined to the configured origin —
-// pathname survives the node adapter's URL rewrite, origins do not (#16).
 const ogUrl = joinUrl(origin, Astro.url.pathname);
 
 const user = Astro.locals.user;

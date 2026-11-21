@@ -4,11 +4,8 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'astro/config';
 import { loadEnv } from 'vite';
 
-// The public origin is a build-time constant (issue #31): every absolute
-// OpenGraph link (og:url / og:image) is minted from astro `site`. The node
-// adapter rewrites request URLs to host-less URLs (issue #16) — `Astro.url`
-// can never supply an origin — so an unset/invalid SITE_URL fails the
-// build here instead of leaking relative or wrong-host OG links.
+// og:link origins must be baked at build — the node adapter rewrites
+// request origins away (issue #16), so SITE_URL fails the build instead.
 const envSite = process.env.SITE_URL ?? loadEnv(process.env.NODE_ENV ?? '', process.cwd(), 'SITE_URL').SITE_URL;
 const siteUrl = typeof envSite === 'string' ? envSite.trim() : '';
 if (siteUrl === '') {

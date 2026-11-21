@@ -44,9 +44,7 @@ const deadlineText = remainingText(summary.endsAtIso, now);
 const pickerIsYou = user !== null && user.isActive && summary.pickerId === user.id;
 const submittedBanner = Boolean(summary.submitted && weekAlbum);
 
-// The main-page embed (issue #31): the week's story from data the page
-// already loads. Cover art rides on the featured album when one resolved
-// (absolute https); otherwise the layout falls back to the site icon.
+// The main-page embed (issue #31) — the week's story from data already loaded.
 const ogDescriptionText = ogDescription({
   week: summary.week,
   pickerName: summary.pickerName,

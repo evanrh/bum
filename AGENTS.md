@@ -40,6 +40,10 @@ delegation protocol.
 - All rules in `plans/README.md` still apply on every ticket: strict
   TypeScript with `.ts` import extensions, Zod at every boundary,
   framework-agnostic `src/lib`, `src/db`, `src/jobs`, real-SQL tests.
+- Comments explain *why*, not *what*: the code stands on its own — no
+  narration or restating. Write a comment only when a constraint,
+  trade-off, or workaround genuinely needs recording (that's rare);
+  an issue reference makes the cheapest version of one.
 - Never rewrite a completed ticket's requirements — record changes in
   the ticket's *Deviations & notes* and, if it alters locked decisions,
   in `plans/README.md` itself, as part of the branch doing the change.

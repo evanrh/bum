@@ -1,12 +1,6 @@
-/**
- * One-shot brand-icon generator (issue #31): renders the inline SVG mark
- * to `public/icon.png` — a 512×512 PNG that serves as the site favicon
- * AND the fallback og:image (Discord floor: raster, ≥200×200, ≤8MB).
- *
- * Run: npm run icon
- * The owner can drop in a hand-made PNG any time; this script stays as
- * the documented generator, so the asset is reproducible from source.
- */
+// Renders the inline SVG mark to public/icon.png — the favicon doubles as
+// the fallback og:image (issue #31); a hand-made PNG may replace it.
+// Run: npm run icon
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 

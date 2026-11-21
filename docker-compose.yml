@@ -1,6 +1,4 @@
-# SITE_URL is a build-time constant baked into the image (OG links,
-# issue #31) — this anchor fails `docker compose` loudly without it
-# (`${VAR:?}`); astro.config.mjs re-checks inside the build itself.
+# SITE_URL bakes the OG-link origin into the image (issue #31).
 x-build: &build
   context: .
   args:
