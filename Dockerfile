@@ -14,6 +14,10 @@ RUN apk add --no-cache python3 make g++ && npm ci --include=dev
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# SITE_URL is the public origin baked into the build (OG links, issue #31):
+# astro.config.mjs fails the build without it; compose passes it as an arg.
+ARG SITE_URL
+ENV SITE_URL=$SITE_URL
 # Astro → dist/ (dist/server/entry.mjs under Astro 5)
 RUN npm run build
 # Server-only Node entries (no Astro/Vite): native node runs these with

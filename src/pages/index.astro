@@ -10,6 +10,7 @@ import * as albumsRepo from '../db/repos/albums.ts';
 import * as ratingsRepo from '../db/repos/ratings.ts';
 import * as usersRepo from '../db/repos/users.ts';
 import { leaderboard, recentActivity, relativeTime, turnSummary } from '../lib/dashboard.ts';
+import { ogDescription } from '../lib/opengraph.ts';
 import { scoreStars } from '../lib/scale.ts';
 
 const db = getDb();
@@ -43,11 +44,36 @@ const deadlineText = remainingText(summary.endsAtIso, now);
 const pickerIsYou = user !== null && user.isActive && summary.pickerId === user.id;
 const submittedBanner = Boolean(summary.submitted && weekAlbum);
 
+// The main-page embed (issue #31): the week's story from data the page
+// already loads. Cover art rides on the featured album when one resolved
+// (absolute https); otherwise the layout falls back to the site icon.
+const ogDescriptionText = ogDescription({
+  week: summary.week,
+  pickerName: summary.pickerName,
+  featured:
+    featured && featuredSubmitter
+      ? {
+          weekStart: featured.weekStart,
+          title: featured.title,
+          artist: featured.artist,
+          submitterName: featuredSubmitter.displayName,
+          avgScore: featuredAvg,
+          ratingCount: featuredStats?.ratingCount ?? 0,
+        }
+      : null,
+});
+
 const activity = await recentActivity(db, 20);
 const board = await leaderboard(db, 5);
 ---
 
-<Base title="Bum — album review club">
+<Base
+  title="Bum — album review club"
+  og={{
+    description: ogDescriptionText,
+    image: featured?.coverUrl ?? undefined,
+  }}
+>
   <section class="mb-6" aria-label="this week's turn">
     {
       /* Astro-template conditionals over possibly-undefined data must be

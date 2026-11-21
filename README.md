@@ -9,6 +9,7 @@ and a running record is kept.
 ```sh
 git clone https://github.com/evanrh/bum.git && cd bum
 npm install
+cp .env.example .env                   # set SITE_URL — required for build/dev
 npm run db:migrate && npm run db:seed   # demo data: admin/bumadmin1 + 3 members
 npm run dev                             # http://localhost:4321
 ```
@@ -39,6 +40,7 @@ npm run build      # production build (outputs dist/)
 npm test           # unit tests
 npm run test:coverage
 npm run typecheck  # tsc --noEmit
+npm run icon       # regenerate public/icon.png (favicon + OG fallback)
 
 ## Docker
 
@@ -49,6 +51,11 @@ docker compose ps             # migrate exited(0), web/jobs running
 docker compose logs -f web    # first run prints the join code once
 ```
 
+- `SITE_URL` (from your `.env` or environment) is required for the image
+  build (issue #31): compose passes it as an ARG, and `${SITE_URL:?}`
+  fails the compose command with a message when it is missing. It is the
+  public origin baked into the OG links — changing it means rebuilding
+  the image.
 - The database is a single SQLite file bind-mounted from `./data/bum.db`
   (WAL mode handles the web + jobs concurrency).
 - Rotate the join code from the admin panel (`/admin`), or set
@@ -58,6 +65,8 @@ docker compose logs -f web    # first run prints the join code once
 - Single-container alternative (web only, no scheduled jobs):
 
   ```sh
+  SITE_URL=https://bum.example.com docker build \
+    --build-arg SITE_URL=https://bum.example.com -t bum-web .
   docker run --init -v "$PWD/data:/data" \
     -e DATABASE_URL=/data/bum.db -p 4321:4321 bum-web
   ```

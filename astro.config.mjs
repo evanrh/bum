@@ -2,9 +2,36 @@ import node from '@astrojs/node';
 import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'astro/config';
+import { loadEnv } from 'vite';
+
+// The public origin is a build-time constant (issue #31): every absolute
+// OpenGraph link (og:url / og:image) is minted from astro `site`. The node
+// adapter rewrites request URLs to host-less URLs (issue #16) — `Astro.url`
+// can never supply an origin — so an unset/invalid SITE_URL fails the
+// build here instead of leaking relative or wrong-host OG links.
+const envSite = process.env.SITE_URL ?? loadEnv(process.env.NODE_ENV ?? '', process.cwd(), 'SITE_URL').SITE_URL;
+const siteUrl = typeof envSite === 'string' ? envSite.trim() : '';
+if (siteUrl === '') {
+  throw new Error(
+    '[bum] SITE_URL is required at build time — the public origin baked into the OG links. Copy .env.example to .env, export SITE_URL, or pass it as a Docker build arg (see .env.example / README).',
+  );
+}
+let site;
+try {
+  const parsed = new URL(siteUrl);
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`protocol ${parsed.protocol}`);
+  }
+  site = parsed.toString();
+} catch (cause) {
+  throw new Error(`[bum] SITE_URL must be an absolute http(s) URL, got ${JSON.stringify(siteUrl)}`, {
+    cause,
+  });
+}
 
 // https://astro.build/config
 export default defineConfig({
+  site,
   output: 'server',
   adapter: node({ mode: 'standalone' }),
   // Astro's built-in CSRF check (checkOrigin defaults to true since 5.12)

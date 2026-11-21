@@ -1,6 +1,14 @@
+# SITE_URL is a build-time constant baked into the image (OG links,
+# issue #31) — this anchor fails `docker compose` loudly without it
+# (`${VAR:?}`); astro.config.mjs re-checks inside the build itself.
+x-build: &build
+  context: .
+  args:
+    SITE_URL: "${SITE_URL:?SITE_URL is required — copy .env.example to .env, or export it (baked into the image for OG links, issue #31)}"
+
 services:
   migrate:
-    build: .
+    build: *build
     # One-shot owner: prepares the bind-mounted data dir for the node user.
     user: "0:0"
     entrypoint:
@@ -13,7 +21,7 @@ services:
       - ./data:/data
     restart: "no"
   covers:
-    build: .
+    build: *build
     # One-shot (issue #27): reconciles cover art for rows inserted while the
     # Spotify oEmbed endpoint was broken (#14). Idempotent — exits
     # immediately when nothing is missing — so it is safe on every up.
@@ -31,7 +39,7 @@ services:
         condition: service_completed_successfully
     restart: "no"
   web:
-    build: .
+    build: *build
     environment:
       DATABASE_URL: /data/bum.db
       HOST: 0.0.0.0
@@ -57,7 +65,7 @@ services:
       timeout: 3s
       retries: 5
   jobs:
-    build: .
+    build: *build
     entrypoint:
       - node
       - dist/jobs/run.mjs

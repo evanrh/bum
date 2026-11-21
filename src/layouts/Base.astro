@@ -2,12 +2,44 @@
 import '../styles/global.css';
 import { getDb } from '../db/index.ts';
 import { submitEligibility, turnSummary } from '../lib/dashboard.ts';
+import { FALLBACK_BLURB, joinUrl, ogImage } from '../lib/opengraph.ts';
 
 interface Props {
   title?: string;
+  og?: {
+    description?: string;
+    image?: string;
+    imageAlt?: string;
+    imageWidth?: number;
+    imageHeight?: number;
+  };
 }
 
-const { title = 'Bum' } = Astro.props;
+const { title = 'Bum', og = {} } = Astro.props;
+
+// The OG origin is the astro `site` (astro.config.mjs throws without
+// SITE_URL at build time) — never Astro.url, whose origin the node
+// adapter rewrites away (issue #16). The type is nullable, so fail
+// loudly here too if a build ever slipped past the config guard.
+const site = Astro.site;
+if (!site) {
+  throw new Error('[bum] astro `site` is unset — SITE_URL must be set at build time (issue #31)');
+}
+const origin = site.origin;
+
+const ogTitle = title;
+const ogDescription = og.description ?? FALLBACK_BLURB;
+const ogImageHref = ogImage({ coverUrl: og.image, origin });
+// Width/height/alt ride along only for the static default (the icon);
+// dynamic cover art arrives with unknown dimensions.
+const staticIcon = og.image === undefined || og.image === null || og.image === '';
+const ogImageAlt = og.imageAlt ?? (staticIcon ? 'Bum logo' : undefined);
+const ogImageWidth = og.imageWidth ?? (staticIcon ? 512 : undefined);
+const ogImageHeight = og.imageHeight ?? (staticIcon ? 512 : undefined);
+// Canonical URL: request pathname joined to the configured origin —
+// pathname survives the node adapter's URL rewrite, origins do not (#16).
+const ogUrl = joinUrl(origin, Astro.url.pathname);
+
 const user = Astro.locals.user;
 const db = getDb();
 const summary = await turnSummary(db);
@@ -22,7 +54,29 @@ const canSubmit = user !== null && user.isActive && submitLink.eligible;
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/png" href="/icon.png" />
+    <link rel="apple-touch-icon" href="/icon.png" />
+    <meta name="theme-color" content="#18181b" />
     <title>{title}</title>
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Bum" />
+    <meta property="og:title" content={ogTitle} />
+    <meta property="og:description" content={ogDescription} />
+    <meta property="og:url" content={ogUrl} />
+    <meta property="og:image" content={ogImageHref} />
+    {
+      ogImageWidth !== undefined && ogImageHeight !== undefined ? (
+        <>
+          <meta property="og:image:width" content={ogImageWidth.toString()} />
+          <meta property="og:image:height" content={ogImageHeight.toString()} />
+        </>
+      ) : null
+    }
+    {ogImageAlt !== undefined ? <meta property="og:image:alt" content={ogImageAlt} /> : null}
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={ogTitle} />
+    <meta name="twitter:description" content={ogDescription} />
+    <meta name="twitter:image" content={ogImageHref} />
   </head>
   <body class="min-h-full bg-zinc-950 text-zinc-100 antialiased">
     <div class="mx-auto flex min-h-full max-w-3xl flex-col px-4 py-8">
