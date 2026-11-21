@@ -311,6 +311,77 @@ export async function skipCurrent(db: Db, admin: User | null, now: number = Date
   }
 }
 
+const selectSchema = z.object({ user_id: z.number().int().positive() });
+
+/**
+ * POST /api/admin/rotation/select — arbitrary override (issue #17): name any
+ * member in the rotation as this week's picker. The chosen member moves to
+ * the head; every other member keeps their relative order (nothing is
+ * pushed to the back, unlike the pop/push skip). Logged as `queue.override`
+ * with the acting admin inside the same transaction.
+ */
+export async function selectPicker(
+  db: Db,
+  admin: User | null,
+  body: unknown,
+  now: number = Date.now(),
+): Promise<Response> {
+  try {
+    const acting = requireAdmin({ user: admin });
+    const input = or400(selectSchema, body);
+    const current = await settingsRepo.getSettings(db, now);
+    const queue = parseQueueJson(current.rotation);
+    if (queue.length === 0) throw new ApiError(409, 'nothing to skip');
+    const index = queue.indexOf(input.user_id);
+    if (index < 0) throw new ApiError(409, 'that member is not in the rotation');
+    const target = await usersRepo.getUserById(db, input.user_id);
+    if (!target) throw new ApiError(404, 'user not found');
+    const previousId = queue[0];
+    const previous = await usersRepo.getUserById(db, previousId);
+    const week = currentTurn({ rotation: current.rotation }, new Date(now)).week;
+    const rotated =
+      index > 0 ? [queue[index], ...queue.slice(0, index), ...queue.slice(index + 1)] : queue;
+
+    await db.transaction((tx) => {
+      tx.insert(auditLog)
+        .values({
+          actorUserId: acting.id,
+          action: 'queue.override',
+          detail:
+            index === 0
+              ? `${acting.displayName} confirmed ${target.displayName} as the picker for week ${week}`
+              : `${acting.displayName} overrode the rotation: ${target.displayName} now picks for week ${week}`,
+          createdAt: now,
+        })
+        .run();
+      if (index !== 0) {
+        tx.update(settings)
+          .set({ rotation: JSON.stringify(rotated), updatedAt: now })
+          .where(eq(settings.id, 1))
+          .run();
+      }
+    });
+
+    const submittedAlbum = await albumsRepo.getAlbumByWeekStart(db, week);
+    let warning: string | undefined;
+    if (submittedAlbum) {
+      const submitter = await usersRepo.getUserById(db, submittedAlbum.submittedBy);
+      warning = `${submitter?.displayName ?? 'someone'} already submitted an album for this week; it was not deleted`;
+    }
+    return new Response(
+      JSON.stringify({
+        queue: rotated,
+        moved: { id: previousId, displayName: previous?.displayName ?? String(previousId) },
+        picker: { id: target.id, displayName: target.displayName },
+        ...(warning ? { warning } : {}),
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  } catch (error) {
+    return jsonError(error);
+  }
+}
+
 /** POST /api/admin/join-code — the plaintext is shown exactly once. */
 export async function rotateJoinCode(db: Db, admin: User | null, now: number = Date.now()): Promise<Response> {
   try {

@@ -147,6 +147,13 @@ always Mondays.
   logged as `queue.override` with the acting admin. Allowed even if the
   head already submitted (the album stays; the response warns). The new
   head simply cannot also submit this week (409, one album per week).
+- **Admin picker override (issue #17)** — the admin may additionally
+  name **any member in the rotation** as this week's picker
+  (`POST /api/admin/rotation/select`): the named member moves to the
+  head while every other member keeps their relative order (nothing is
+  pushed to the back). Selecting the current head is a confirmed no-op.
+  Same audit + warning semantics as the skip; a member outside the
+  rotation is a 409.
 - **Membership changes** — signup appends the new user's id to the back
   of the queue (T03). Admin reorder rewrites the whole array (T07).
   Deactivating a member removes their id from the queue wherever it

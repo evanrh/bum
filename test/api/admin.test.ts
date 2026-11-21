@@ -14,6 +14,7 @@ import {
   listAudit,
   listUsers,
   rotateJoinCode,
+  selectPicker,
   setOrder,
   skipCurrent,
   toggleJoining,
@@ -266,6 +267,68 @@ describe('rotation skip (manual pop/push)', () => {
     const response = await skipCurrent(db, admin, now);
     expect(response.status).toBe(409);
     expect((await response.json()).error).toBe('nothing to skip');
+  });
+});
+
+describe('rotation select (arbitrary override, issue #17)', () => {
+  it('names any member as picker — they move to the head, others keep relative order; audited', async () => {
+    const response = await selectPicker(db, admin, { user_id: members.dave.id }, now);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      queue: number[]; moved: { displayName: string }; picker: { id: number; displayName: string };
+    };
+    expect(body.picker).toMatchObject({ id: members.dave.id, displayName: 'dave' });
+    expect(body.moved.displayName).toBe('bob'); // the displaced former head
+    expect(body.queue).toEqual([members.dave.id, members.bob.id, members.carol.id, members.admin.id]);
+    expect(await settingsRepo.getRotation(db)).toEqual(body.queue);
+
+    const audits = await auditRepo.listRecentAudit(db, 5);
+    expect(audits[0].action).toBe('queue.override');
+    expect(audits[0].actorUsername).toBe('admin');
+    expect(audits[0].detail).toContain('overrode the rotation');
+    expect(audits[0].detail).toContain('dave');
+  });
+
+  it('selecting the current head changes nothing but is still confirmed and audited', async () => {
+    const before = await settingsRepo.getRotation(db);
+    const response = await selectPicker(db, admin, { user_id: members.bob.id }, now);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { queue: number[] };
+    expect(body.queue).toEqual(before);
+    expect((await settingsRepo.getRotation(db))).toEqual(before);
+    const audits = await auditRepo.listRecentAudit(db, 5);
+    expect(audits[0].action).toBe('queue.override');
+    expect(audits[0].detail).toContain('confirmed');
+  });
+
+  it('warns when this week already has an album and leaves it alone', async () => {
+    const { weekId } = await import('../../src/lib/rotation.ts');
+    const currentWeek = weekId(new Date(now));
+    await albumsRepo.insertAlbum(db, {
+      title: 'Kind of Blue', artist: 'Miles Davis', submittedBy: members.bob.id, submittedAt: now, weekStart: currentWeek,
+    });
+    const response = await selectPicker(db, admin, { user_id: members.carol.id }, now);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { warning?: string };
+    expect(body.warning).toContain('submitted an album');
+    expect(await albumsRepo.getAlbumByWeekStart(db, currentWeek)).not.toBeUndefined();
+  });
+
+  it('409 for a member outside the rotation: 400 for a bad body; 409 on an empty queue', async () => {
+    const outside = await selectPicker(db, admin, { user_id: 99999 }, now);
+    expect(outside.status).toBe(409);
+    expect((await outside.json()).error).toBe('that member is not in the rotation');
+    const bad = await selectPicker(db, admin, { user_id: 'not-a-number' }, now);
+    expect(bad.status).toBe(400);
+    await settingsRepo.setRotation(db, [], now);
+    const empty = await selectPicker(db, admin, { user_id: members.bob.id }, now);
+    expect(empty.status).toBe(409);
+    expect((await empty.json()).error).toBe('nothing to skip');
+  });
+
+  it('is guarded like every admin mutation', async () => {
+    expect((await selectPicker(db, null, { user_id: members.bob.id }, now)).status).toBe(401);
+    expect((await selectPicker(db, await memberUser(members.bob), { user_id: members.bob.id }, now)).status).toBe(403);
   });
 });
 

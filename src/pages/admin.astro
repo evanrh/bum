@@ -69,6 +69,7 @@ const audit = isAdmin ? await auditRepo.listRecentAudit(db, 50) : [];
           pickerName={namesById.get(summary!.pickerId ?? -1) ?? 'nobody'}
           nextPickerName={nextPickerName}
           hasAlbum={Boolean(weekAlbum)}
+          queue={queue.map((memberId) => ({ id: memberId, name: namesById.get(memberId) ?? `#${memberId}` }))}
         />
       </section>
 

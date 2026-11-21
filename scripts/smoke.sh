@@ -157,12 +157,22 @@ status="$(post -X POST "$BASE_URL/api/signup" -c "$JAR_E" -d '{"join_code":"'"$N
 expect_status "$status" 201 "a member joins with the fresh code"
 
 # 8. admin deletes the week's album, then skips → B picks the remainder --------
+SKIP_OUT="$(mktemp -t bum-smoke-skip-XXXXXX)"
 status="$(post -b "$JAR_A" -X POST "$BASE_URL/api/albums/$ALBUM_ID/delete")"
 expect_status "$status" 204 "admin deletes the week's album"
-status="$(post -b "$JAR_A" -X POST "$BASE_URL/api/admin/rotation/skip")"
-expect_status "$status" 200 "admin skip moves the picker"
+skip_status="$(post -b "$JAR_A" -X POST "$BASE_URL/api/admin/rotation/skip")"
+expect_status "$skip_status" 200 "admin skip moves the picker"
+cp "$TMP_OUT" "$SKIP_OUT"
 status="$(post -b "$JAR_B" -X POST "$BASE_URL/api/albums" -d '{"title":"Remainder Pick","artist":"B Member","youtube_url":"https://youtube.com/watch?v=f27gQXSnU0M"}')"
 expect_status "$status" 201 "B (now the picker) submits"
+
+# 8b. arbitrary override (issue #17): name the LAST member of the queue as the
+# picker — must move them to the head without disturbing the others' order.
+OVERRIDE_TARGET="$(grep -o '"queue":\[[^]]*\]' "$SKIP_OUT" | sed 's/"queue":\[//; s/\]//' | awk -F, '{print $NF}')"
+[ -n "$OVERRIDE_TARGET" ] || die "could not read the skip response queue for the override step"
+status="$(post -b "$JAR_A" -X POST "$BASE_URL/api/admin/rotation/select" -d '{"user_id":'"$OVERRIDE_TARGET"'}')"
+expect_status "$status" 200 "admin overrides to an arbitrary member (issue #17)"
+grep -q "\"picker\":{\"id\":$OVERRIDE_TARGET" "$TMP_OUT" || die "override did not set the requested picker as head"
 
 # 9. logout + anonymous access ---------------------------------------------------
 status="$(post -b "$JAR_A" -X POST "$BASE_URL/api/logout")"
