@@ -167,12 +167,15 @@ status="$(post -b "$JAR_B" -X POST "$BASE_URL/api/albums" -d '{"title":"Remainde
 expect_status "$status" 201 "B (now the picker) submits"
 
 # 8b. arbitrary override (issue #17): name the LAST member of the queue as the
-# picker — must move them to the head without disturbing the others' order.
-OVERRIDE_TARGET="$(grep -o '"queue":\[[^]]*\]' "$SKIP_OUT" | sed 's/"queue":\[//; s/\]//' | awk -F, '{print $NF}')"
+# picker — the queue must rotate so they lead, pre-head order behind the tail.
+SKIP_QUEUE="$(grep -o '"queue":\[[^]]*\]' "$SKIP_OUT" | sed 's/"queue":\[//; s/\]//')"
+OVERRIDE_TARGET="$(echo "$SKIP_QUEUE" | awk -F, '{print $NF}')"
 [ -n "$OVERRIDE_TARGET" ] || die "could not read the skip response queue for the override step"
 status="$(post -b "$JAR_A" -X POST "$BASE_URL/api/admin/rotation/select" -d '{"user_id":'"$OVERRIDE_TARGET"'}')"
 expect_status "$status" 200 "admin overrides to an arbitrary member (issue #17)"
 grep -q "\"picker\":{\"id\":$OVERRIDE_TARGET" "$TMP_OUT" || die "override did not set the requested picker as head"
+EXPECTED_QUEUE="$OVERRIDE_TARGET,$(echo "$SKIP_QUEUE" | sed 's/,[^,]*$//')"
+grep -q "\"queue\":\[$EXPECTED_QUEUE\]" "$TMP_OUT" || die "override rotated the order incorrectly (expected $EXPECTED_QUEUE)"
 
 # 9. logout + anonymous access ---------------------------------------------------
 status="$(post -b "$JAR_A" -X POST "$BASE_URL/api/logout")"

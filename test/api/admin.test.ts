@@ -271,7 +271,7 @@ describe('rotation skip (manual pop/push)', () => {
 });
 
 describe('rotation select (arbitrary override, issue #17)', () => {
-  it('names any member as picker — they move to the head, others keep relative order; audited', async () => {
+  it('names any member as picker — the queue rotates to their head; audited', async () => {
     const response = await selectPicker(db, admin, { user_id: members.dave.id }, now);
     expect(response.status).toBe(200);
     const body = (await response.json()) as {
@@ -279,7 +279,8 @@ describe('rotation select (arbitrary override, issue #17)', () => {
     };
     expect(body.picker).toMatchObject({ id: members.dave.id, displayName: 'dave' });
     expect(body.moved.displayName).toBe('bob'); // the displaced former head
-    expect(body.queue).toEqual([members.dave.id, members.bob.id, members.carol.id, members.admin.id]);
+    // Rotation: everyone before dave keeps their order behind the tail.
+    expect(body.queue).toEqual([members.dave.id, members.admin.id, members.bob.id, members.carol.id]);
     expect(await settingsRepo.getRotation(db)).toEqual(body.queue);
 
     const audits = await auditRepo.listRecentAudit(db, 5);
@@ -287,6 +288,14 @@ describe('rotation select (arbitrary override, issue #17)', () => {
     expect(audits[0].actorUsername).toBe('admin');
     expect(audits[0].detail).toContain('overrode the rotation');
     expect(audits[0].detail).toContain('dave');
+  });
+
+  it('a mid-queue choice rotates strictly: pre-member order lands at the back in order', async () => {
+    // [bob, carol, dave, admin] + select carol (index 1) → [carol, dave, admin, bob].
+    const response = await selectPicker(db, admin, { user_id: members.carol.id }, now);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { queue: number[] };
+    expect(body.queue).toEqual([members.carol.id, members.dave.id, members.admin.id, members.bob.id]);
   });
 
   it('selecting the current head changes nothing but is still confirmed and audited', async () => {

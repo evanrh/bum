@@ -339,8 +339,12 @@ export async function selectPicker(
     const previousId = queue[0];
     const previous = await usersRepo.getUserById(db, previousId);
     const week = currentTurn({ rotation: current.rotation }, new Date(now)).week;
-    const rotated =
-      index > 0 ? [queue[index], ...queue.slice(0, index), ...queue.slice(index + 1)] : queue;
+    // Issue #17 (owner feedback): the override ROTATES the queue circularly
+    // until the named member is at the head — [a,b,c,d] + select c →
+    // [c,d,a,b]: everyone before them goes to the back, in order. This
+    // composes with the weekly pop/push advance, so a full cycle restores
+    // the original order exactly. It is NOT a remove+insert.
+    const rotated = index === 0 ? queue : [...queue.slice(index), ...queue.slice(0, index)];
 
     await db.transaction((tx) => {
       tx.insert(auditLog)

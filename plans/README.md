@@ -149,9 +149,11 @@ always Mondays.
   head simply cannot also submit this week (409, one album per week).
 - **Admin picker override (issue #17)** — the admin may additionally
   name **any member in the rotation** as this week's picker
-  (`POST /api/admin/rotation/select`): the named member moves to the
-  head while every other member keeps their relative order (nothing is
-  pushed to the back). Selecting the current head is a confirmed no-op.
+  (`POST /api/admin/rotation/select`): the queue **rotates** circularly
+  until the named member is at the head ([a,b,c,d] + select c →
+  [c,d,a,b] — everyone before them goes to the back, in order), which
+  composes with the weekly advance so a full cycle restores the
+  original order. Selecting the current head is a confirmed no-op.
   Same audit + warning semantics as the skip; a member outside the
   rotation is a 409.
 - **Membership changes** — signup appends the new user's id to the back

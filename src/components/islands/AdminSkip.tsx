@@ -64,7 +64,7 @@ export function AdminSkip({ week, pickerName, nextPickerName, hasAlbum, queue }:
   const select = (): Promise<void> =>
     act(
       () => !!selected && window.confirm(
-        `Set ${selected.name} as this week's picker? They move to the front of the rotation; everyone else keeps their current order.`,
+        `Rotate the queue so ${selected.name} picks week ${week}? Everyone before ${selected.name} goes to the back, keeping the rest of the order.`,
       ),
       () => fetch('/api/admin/rotation/select', {
         method: 'POST',
