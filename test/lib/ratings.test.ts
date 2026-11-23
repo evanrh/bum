@@ -5,7 +5,7 @@ import * as ratingsRepo from '../../src/db/repos/ratings.ts';
 import * as usersRepo from '../../src/db/repos/users.ts';
 import type { Db } from '../../src/db/index.ts';
 import { ApiError } from '../../src/lib/errors.ts';
-import { deleteRating, upsertRating } from '../../src/lib/ratings.ts';
+import { deleteRating, parseMyRatingsQuery, upsertRating } from '../../src/lib/ratings.ts';
 import { makeDb, seedMembers, type FixtureMembers } from '../db/helpers.ts';
 
 let db: Db;
@@ -126,5 +126,38 @@ describe('deleteRating', () => {
     } catch (error) {
       expect((error as ApiError).status).toBe(404);
     }
+  });
+});
+
+describe('parseMyRatingsQuery (issue #37)', () => {
+  it('defaults to first-rated, newest first', () => {
+    expect(parseMyRatingsQuery({})).toEqual({ field: 'created', direction: 'desc' });
+  });
+
+  it('accepts every field/direction combination', () => {
+    expect(parseMyRatingsQuery({ sort: 'created', dir: 'asc' })).toEqual({ field: 'created', direction: 'asc' });
+    expect(parseMyRatingsQuery({ sort: 'score', dir: 'desc' })).toEqual({ field: 'score', direction: 'desc' });
+    expect(parseMyRatingsQuery({ sort: 'score', dir: 'asc' })).toEqual({ field: 'score', direction: 'asc' });
+  });
+
+  it('rejects unknown sort or direction values with 400', () => {
+    const badInputs: Array<Record<string, string>> = [
+      { sort: 'average' },
+      { dir: 'sideways' },
+      { sort: '' },
+      { dir: 'DESC' },
+    ];
+    for (const bad of badInputs) {
+      try {
+        parseMyRatingsQuery(bad);
+        expect.fail('should have thrown');
+      } catch (error) {
+        expect((error as ApiError).status).toBe(400);
+      }
+    }
+  });
+
+  it('ignores unrelated query params', () => {
+    expect(parseMyRatingsQuery({ page: '2', by: '3' })).toEqual({ field: 'created', direction: 'desc' });
   });
 });

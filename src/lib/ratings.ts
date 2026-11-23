@@ -69,3 +69,20 @@ export async function deleteRating(
   if (anyRatings.length === 0) throw new ApiError(404, 'rating not found');
   throw new ApiError(403, 'you can only delete your own rating');
 }
+
+/**
+ * /my-ratings URL state (issue #37): sort by first-rated date or own score,
+ * ascending or descending. Missing params fall back to newest-first; any
+ * unknown value is a 400, matching how /albums treats its query.
+ */
+export const myRatingsQuerySchema = z.object({
+  sort: z.enum(['created', 'score']).optional(),
+  dir: z.enum(['asc', 'desc']).optional(),
+});
+
+export function parseMyRatingsQuery(
+  params: Record<string, string>,
+): ratingsRepo.RatingHistorySort {
+  const parsed = or400(myRatingsQuerySchema, params);
+  return { field: parsed.sort ?? 'created', direction: parsed.dir ?? 'desc' };
+}
