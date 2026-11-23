@@ -269,7 +269,10 @@ describe('runBoot', () => {
   it('runs the REAL spawn/signal path (no injected dependencies)', async () => {
     // Real child_process with real exit events; only signal capture is
     // swappable so the test can drive shutdown deterministically without
-    // sending OS signals to the vitest worker itself.
+    // sending OS signals to the vitest worker itself. The spawned run.mjs
+    // inherits this worker's env — always pin DATABASE_URL or it opens the
+    // developer's real ./data/dev.db (repo cwd).
+    process.env.DATABASE_URL = path.join(mkdtempSync(path.join(tmpdir(), 'bum-real-')), 'bum.db');
     const handlers = new Map<NodeJS.Signals, () => void>();
     const pending = runBoot({
       isRoot: () => false,

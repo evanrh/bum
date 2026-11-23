@@ -244,10 +244,11 @@ always Mondays.
   insert; `npm run covers:backfill` (bundled as
   `dist/jobs/backfill-covers.mjs`) re-runs the same semantics for rows
   inserted without a cover; since issue #39 the backfill is a **manual
-  lever** (`docker exec <container> node dist/jobs/backfill-covers.mjs` —
-  exits 1 when some resolutions fail so it can simply be re-run), having
-  retired the compose covers one-shot from issue #27. Failure is
-  non-fatal: `cover_url` stays null and the UI shows a gradient placeholder.
+  lever** (`docker exec -u node <container>
+  node dist/jobs/backfill-covers.mjs` — exits 1 when some resolutions fail
+  so it can simply be re-run), having retired the compose covers one-shot
+  from issue #27. Failure is non-fatal: `cover_url` stays null and the UI
+  shows a gradient placeholder.
 
 ## Conventions
 
