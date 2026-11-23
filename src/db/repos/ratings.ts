@@ -1,6 +1,6 @@
-import { and, eq, desc } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 
-import { ratings, users, type Rating } from '../schema.ts';
+import { albums, ratings, users, type Rating } from '../schema.ts';
 import type { Db } from '../index.ts';
 
 export type UpsertRatingInput = {
@@ -80,11 +80,45 @@ export async function listRatingsForAlbum(db: Db, albumId: string): Promise<Rati
     .orderBy(desc(ratings.createdAt));
 }
 
-/** All ratings by one member — the personal history view. */
-export async function listRatingsByUser(db: Db, userId: number): Promise<Rating[]> {
+/** All ratings by one member — the personal history view (issue #37). */
+export type RatingHistorySort = {
+  /**
+   * "created" = first rated (created_at survives edits), "score" = the
+   * member's own current rating. Ties break by ratings.id DESC so repeated
+   * requests page/sort identically.
+   */
+  field: 'created' | 'score';
+  direction: 'asc' | 'desc';
+};
+
+export type MyRatingRow = Rating & {
+  albumTitle: string;
+  albumArtist: string;
+  albumYear: number | null;
+};
+
+/** One member's ratings joined with their albums — the /my-ratings read model. */
+export async function listRatingsByUser(
+  db: Db,
+  userId: number,
+  sort: RatingHistorySort = { field: 'created', direction: 'desc' },
+): Promise<MyRatingRow[]> {
+  const primary = sort.field === 'score' ? ratings.score : ratings.createdAt;
   return db
-    .select()
+    .select({
+      id: ratings.id,
+      albumId: ratings.albumId,
+      userId: ratings.userId,
+      score: ratings.score,
+      comment: ratings.comment,
+      createdAt: ratings.createdAt,
+      updatedAt: ratings.updatedAt,
+      albumTitle: albums.title,
+      albumArtist: albums.artist,
+      albumYear: albums.year,
+    })
     .from(ratings)
+    .innerJoin(albums, eq(ratings.albumId, albums.id))
     .where(eq(ratings.userId, userId))
-    .orderBy(desc(ratings.updatedAt));
+    .orderBy(sort.direction === 'asc' ? asc(primary) : desc(primary), desc(ratings.id));
 }

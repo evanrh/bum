@@ -94,3 +94,88 @@ describe('ratings repo', () => {
     expect(await ratingsRepo.listRatingsByUser(db, fixture.bob.id)).toHaveLength(0);
   });
 });
+
+describe('listRatingsByUser — personal history (issue #37)', () => {
+  let albumB = '';
+  let albumC = '';
+
+  beforeEach(async () => {
+    albumB = await makeAlbumId(db, '2026-01-12', fixture.carol.id);
+    albumC = await makeAlbumId(db, '2026-01-19', fixture.dave.id);
+    // bob rates all three albums: distinct recency, a score tie between the
+    // outer two; carol rates one of the same albums for isolation checks.
+    await ratingsRepo.upsertRating(
+      db,
+      { albumId: jazzId, userId: fixture.bob.id, score: 5, comment: 'first take' },
+      now + 10,
+    );
+    await ratingsRepo.upsertRating(db, { albumId: albumB, userId: fixture.bob.id, score: 9, comment: 'great' }, now + 20);
+    await ratingsRepo.upsertRating(db, { albumId: albumC, userId: fixture.bob.id, score: 5 }, now + 30);
+    await ratingsRepo.upsertRating(db, { albumId: jazzId, userId: fixture.carol.id, score: 2 }, now + 15);
+  });
+
+  it('defaults to first-rated, newest first, with the album joined in', async () => {
+    const rows = await ratingsRepo.listRatingsByUser(db, fixture.bob.id);
+    expect(rows.map((r) => r.albumTitle)).toEqual([
+      'album for week 2026-01-19',
+      'album for week 2026-01-12',
+      'album for week 2026-01-05',
+    ]);
+    expect(rows.every((r) => r.userId === fixture.bob.id)).toBe(true);
+    expect(rows[0]).toMatchObject({
+      score: 5,
+      comment: null,
+      albumArtist: 'some artist',
+      albumYear: null,
+    });
+    expect(rows[1]).toMatchObject({ score: 9, comment: 'great' });
+  });
+
+  it('honours created asc and score asc/desc; score ties break by id desc', async () => {
+    const oldestFirst = await ratingsRepo.listRatingsByUser(db, fixture.bob.id, {
+      field: 'created',
+      direction: 'asc',
+    });
+    expect(oldestFirst.map((r) => r.albumTitle)).toEqual([
+      'album for week 2026-01-05',
+      'album for week 2026-01-12',
+      'album for week 2026-01-19',
+    ]);
+    const highestFirst = await ratingsRepo.listRatingsByUser(db, fixture.bob.id, {
+      field: 'score',
+      direction: 'desc',
+    });
+    expect(highestFirst.map((r) => r.albumId)).toEqual([albumB, albumC, jazzId]);
+    const lowestFirst = await ratingsRepo.listRatingsByUser(db, fixture.bob.id, {
+      field: 'score',
+      direction: 'asc',
+    });
+    expect(lowestFirst.map((r) => r.albumId)).toEqual([albumC, jazzId, albumB]);
+  });
+
+  it('an edit keeps the recency position but reorders by the current score', async () => {
+    await ratingsRepo.upsertRating(
+      db,
+      { albumId: jazzId, userId: fixture.bob.id, score: 4, comment: 'cooled' },
+      now + 1000,
+    );
+    const newestFirst = await ratingsRepo.listRatingsByUser(db, fixture.bob.id);
+    expect(newestFirst.map((r) => r.albumTitle)).toEqual([
+      'album for week 2026-01-19',
+      'album for week 2026-01-12',
+      'album for week 2026-01-05',
+    ]);
+    expect(newestFirst[2]?.createdAt).toBe(now + 10);
+    const lowestFirst = await ratingsRepo.listRatingsByUser(db, fixture.bob.id, {
+      field: 'score',
+      direction: 'asc',
+    });
+    expect(lowestFirst.map((r) => r.albumId)).toEqual([jazzId, albumC, albumB]);
+  });
+
+  it('lists only the requested member', async () => {
+    const mine = await ratingsRepo.listRatingsByUser(db, fixture.carol.id);
+    expect(mine).toHaveLength(1);
+    expect(mine[0]).toMatchObject({ albumId: jazzId, score: 2, userId: fixture.carol.id });
+  });
+});
