@@ -1,8 +1,8 @@
 import { useState } from 'react';
 
 import { albumInputSchema } from '../../lib/albums.ts';
-import { spotifyEmbedUrl, youtubeEmbedUrl } from '../../lib/external.ts';
 import { useDragOrder } from './useDragOrder.ts';
+import { AlbumCard } from '../react/AlbumCard.tsx';
 import { Show } from '../react/Show.tsx';
 
 export type BacklogRow = {
@@ -41,44 +41,6 @@ const collectFieldErrors = (
   }
   return errors;
 };
-
-/**
- * Home-screen-style preview of one queued album (embed + text, mirroring the
- * dashboard's featured block. Covers are not shown there either).
- */
-function BacklogPreview({ item }: { item: BacklogRow }) {
-  const spotifySrc = item.spotifyId ? spotifyEmbedUrl(item.spotifyId) : undefined;
-  const youtubeSrc = item.youtubeId ? youtubeEmbedUrl(item.youtubeId) : undefined;
-  return (
-    <div>
-      <Show when={spotifySrc}>
-        <iframe
-          src={spotifySrc}
-          className="w-full"
-          style={{ height: '152px', border: '0' }}
-          loading="lazy"
-          title={`${item.title} — Spotify`}
-          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-        />
-      </Show>
-      <Show when={!spotifySrc && youtubeSrc}>
-        <div style={{ aspectRatio: '16 / 9' }}>
-          <iframe
-            src={youtubeSrc}
-            style={{ height: '100%', width: '100%', border: '0' }}
-            loading="lazy"
-            title={`${item.title} — YouTube`}
-            allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; fullscreen"
-            allowFullScreen
-          />
-        </div>
-      </Show>
-      <Show when={!spotifySrc && !youtubeSrc}>
-        <div className="rounded bg-zinc-900 px-6 py-8 text-center text-sm text-zinc-500">no preview available</div>
-      </Show>
-    </div>
-  );
-}
 
 export function BacklogManager({ items: initial, autoBacklog: autoInitial }: BacklogManagerProps) {
   const [autoBacklog, setAutoBacklog] = useState(autoInitial);
@@ -245,7 +207,7 @@ export function BacklogManager({ items: initial, autoBacklog: autoInitial }: Bac
             nothing queued yet — add albums below and they'll be waiting for your weeks.
           </p>
         </Show>
-        <ol className="flex flex-col gap-4">
+        <ol className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           {order.items.map((item, index) => (
             <li
               key={item.id}
@@ -253,22 +215,17 @@ export function BacklogManager({ items: initial, autoBacklog: autoInitial }: Bac
               onDragStart={(event) => order.onDragStart(index, event)}
               onDragOver={(event) => order.onDragOver(index, event)}
               onDragEnd={(event) => order.onDragEnd(event)}
-              className={`drag-row rounded-xl border border-zinc-800 bg-zinc-900 p-4 ${index === order.dragged ? 'opacity-50' : ''}`}
+              className={`cursor-grab ${index === order.dragged ? 'opacity-50' : ''}`}
+              title="drag to reorder (or use the arrows)"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <Show when={index === 0}>
-                    <span className="text-xs font-medium text-amber-400">
-                      next up — auto-set when your week starts
-                    </span>
-                  </Show>
-                  <h3 className="text-base font-semibold text-zinc-100">
-                    <span className="cursor-grab select-none" title="drag to reorder (or use the arrows)">{item.title}</span>
-                  </h3>
-                  <p className="text-sm text-zinc-400">
-                    {item.artist}{item.year ? ` (${item.year})` : ''}
-                  </p>
-                </div>
+              <AlbumCard
+                title={item.title}
+                artist={item.artist}
+                year={item.year}
+                coverUrl={item.coverUrl}
+                note={item.note}
+                nextUp={index === 0}
+              >
                 <span className="flex flex-none gap-1" aria-label={`reorder ${item.title} with the keyboard`}>
                   <button type="button" disabled={order.saving || pending || index === 0} onClick={() => order.move(index, -1)}
                     className="rounded border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300 disabled:opacity-30"
@@ -277,14 +234,6 @@ export function BacklogManager({ items: initial, autoBacklog: autoInitial }: Bac
                     className="rounded border border-zinc-700 px-2 py-0.5 text-xs text-zinc-300 disabled:opacity-30"
                     aria-label={`move ${item.title} down`}>▼</button>
                 </span>
-              </div>
-              <div className="mt-3">
-                <BacklogPreview item={item} />
-              </div>
-              <Show when={item.note}>
-                <p className="mt-3 rounded bg-zinc-950 px-4 py-3 text-sm italic text-zinc-300">“{item.note}”</p>
-              </Show>
-              <div className="mt-3 text-right">
                 <button
                   type="button"
                   onClick={() => void remove(item.id)}
@@ -293,7 +242,7 @@ export function BacklogManager({ items: initial, autoBacklog: autoInitial }: Bac
                 >
                   remove
                 </button>
-              </div>
+              </AlbumCard>
             </li>
           ))}
         </ol>

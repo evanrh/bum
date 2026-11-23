@@ -39,6 +39,25 @@ describe('<BacklogManager> drag-to-reorder (issue #25)', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('renders queue entries as album-style cards with covers, notes and no embeds', () => {
+    render(
+      <BacklogManager
+        items={[
+          { ...ITEMS[0], coverUrl: '/cover-alpha.jpg', note: 'a keeper' },
+          { ...ITEMS[1], spotifyId: 'abc1234567', youtubeId: 'abcdefghijk', year: 1999 },
+        ]}
+        autoBacklog
+      />,
+    );
+    expect(document.querySelector('ol')?.className).toContain('grid-cols-2');
+    expect(screen.getByAltText('cover of Alpha')).toBeTruthy();
+    expect(screen.getByText('“a keeper”')).toBeTruthy();
+    expect(screen.getByText('Two (1999)')).toBeTruthy();
+    expect(document.querySelectorAll('.album-card-fallback')).toHaveLength(1);
+    expect(document.querySelector('iframe')).toBeNull();
+    expect(screen.getAllByText('next up')).toHaveLength(1);
+  });
+
   it('dragging is local: the save button appears and persists the full order', async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
     render(<BacklogManager items={ITEMS} autoBacklog />);
