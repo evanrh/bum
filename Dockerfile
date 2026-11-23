@@ -40,11 +40,10 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
 COPY drizzle ./drizzle
-RUN mkdir -p /data && chown node:node /data
-USER node
 # Image defaults so a plain `docker run` needs only SITE_URL.
 ENV DATABASE_URL=/data/bum.db
 ENV HOST=0.0.0.0 PORT=4321
-# boot.mjs validates env, prepares /data + drops privileges, migrates, then
-# supervises web + the cron jobs (issue #39).
+# boot.mjs DELIBERATELY starts as root: it validates env, chowns the
+# bind-mounted data dir to `node`, drops to that user via setgid/setuid,
+# migrates, then supervises web + the cron jobs as `node` (issue #39).
 ENTRYPOINT ["node", "dist/jobs/boot.mjs"]

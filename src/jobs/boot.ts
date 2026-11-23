@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import type { SpawnOptions } from 'node:child_process';
 import { chownSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { databasePath } from '../db/index.ts';
 import { migrateDatabase } from '../db/migrations.ts';
@@ -10,11 +10,12 @@ import { parseSiteUrl } from '../lib/config.ts';
 
 /**
  * Container boot entrypoint (issue #39): the image's single ENTRYPOINT
- * process. The order is load-bearing — required env first (nothing may run
- * before it validates), then the data dir is prepared and privileges drop
- * to `node` while still root (bind mounts arrive root-owned), then
- * migrations, then web + cron spawn (supervised: a child dying stops the
- * container so the restart policy recovers).
+ * process. The order is load-bearing — signals attach first (pid 1 ignores
+ * them by default, so a stop during startup is seen), then required env
+ * (nothing may run before it validates), then the data dir is prepared and
+ * privileges drop to `node` while still root (bind mounts arrive
+ * root-owned), then migrations, then web + cron spawn (supervised: a child
+ * failing or dying stops the container so the restart policy recovers).
  */
 
 export type NodeIdentity = { uid: number; gid: number };
@@ -23,6 +24,7 @@ export type NodeIdentity = { uid: number; gid: number };
 export type SpawnedChild = {
   pid?: number;
   on(event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void): unknown;
+  on(event: 'error', listener: (error: Error) => void): unknown;
   kill(signal?: NodeJS.Signals): boolean;
 };
 
@@ -48,8 +50,8 @@ export function resolveNodeIdentity(passwdPath: string = '/etc/passwd'): NodeIde
     if (fields[0] === 'node') {
       const uid = Number(fields[2]);
       const gid = Number(fields[3]);
+      // A malformed `node` line must not shadow a later valid one.
       if (Number.isFinite(uid) && Number.isFinite(gid)) return { uid, gid };
-      break;
     }
   }
   throw new Error('[bum] no usable `node` entry in /etc/passwd — cannot drop privileges');
@@ -99,61 +101,119 @@ function registerSignal(signal: NodeJS.Signals, handler: () => void): void {
 }
 
 /**
+ * Repo/image root — two levels up from this file in BOTH layouts: from
+ * `src/jobs/boot.ts` (dev) and from the bundled `dist/jobs/boot.mjs`
+ * (image), `../../` lands on /app. Child paths are absolute so `docker
+ * exec -w /some/dir` still finds the entries.
+ */
+export function appRoot(): string {
+  return fileURLToPath(new URL('../..', import.meta.url));
+}
+
+/**
  * Validate env → prepare/privilege-drop → migrate → supervise web + jobs.
- * Resolves with the container exit code: 0 on a clean stop, 1 when a child
- * died un-asked. Throws before anything spawns when the env is unusable.
+ * Resolves with the container exit code: 0 on a clean stop (including a
+ * stop that arrived during startup), 1 when a child failed or died
+ * un-asked. Throws before anything spawns when the env is unusable.
  */
 export async function runBoot(deps: BootDeps = {}): Promise<number> {
   const log = (message: string): void => (deps.log ?? console.log)(`[bum] ${message}`);
 
+  // Signals first: pid 1 ignores SIGTERM/SIGINT by default, so anything
+  // arriving during env validation / migrations must be flagged now. Before
+  // children exist the handlers only record the stop; afterwards they stop
+  // the children too.
+  let stopRequested = false;
+  let children: { jobs: SpawnedChild; web: SpawnedChild } | undefined;
+  const register = deps.registerSignal ?? registerSignal;
+  const onSignal = (signal: NodeJS.Signals): void => {
+    stopRequested = true;
+    if (children) {
+      children.jobs.kill(signal);
+      children.web.kill(signal);
+    }
+  };
+  register('SIGTERM', () => onSignal('SIGTERM'));
+  register('SIGINT', () => onSignal('SIGINT'));
+
+  // 1. Required env — before any filesystem or network action (issue #39).
   const site = parseSiteUrl(process.env.SITE_URL);
   log(`env ok — OG links use ${site.origin}`);
 
-  if ((deps.isRoot ?? isRoot)()) {
+  // 2. Root preflight (containers): make the bind-mounted data dir writable
+  //    by the unprivileged user, then continue as that user. Skipped for
+  //    non-root runs (dev) and in-memory databases.
+  const dbPath = databasePath();
+  if ((deps.isRoot ?? isRoot)() && dbPath !== ':memory:') {
     const identity = (deps.resolveIdentity ?? resolveNodeIdentity)();
-    const dbDir = path.dirname(databasePath());
+    const dbDir = path.dirname(dbPath);
     (deps.prepareDataDir ?? prepareDataDir)(dbDir, identity);
     log(`data dir ${dbDir} prepared for uid ${identity.uid}/gid ${identity.gid}`);
     (deps.dropToNode ?? dropToNode)(identity);
     log('continuing as the `node` user');
   }
 
-  const { count } = (deps.applyMigrations ?? defaultMigrations)();
+  // 3. Migrations before web or jobs can touch the database.
+  const { count } = await (deps.applyMigrations ?? defaultMigrations)();
   log(`migrations applied — journal entries: ${count}`);
 
+  // 4. Supervise web + cron: inherit stdio (container logs), forward
+  //    signals, and let a crashing child stop the container so the restart
+  //    policy recovers.
+  if (stopRequested) {
+    log('stop requested during startup — exiting before spawning');
+    return 0;
+  }
   const spawnChild =
     deps.spawn ?? ((command: string, args: string[], options?: SpawnOptions): SpawnedChild =>
       spawn(command, args, { stdio: 'inherit', ...options }));
-  const jobs = spawnChild('node', ['dist/jobs/run.mjs']);
-  const web = spawnChild('node', ['dist/server/entry.mjs']);
-  log(`supervising web (pid ${web.pid ?? 'n/a'}) and jobs (pid ${jobs.pid ?? 'n/a'})`);
-
-  let shuttingDown = false;
-  let alive = 2;
-  const killAll = (signal: NodeJS.Signals): void => {
-    shuttingDown = true;
-    jobs.kill(signal);
-    web.kill(signal);
+  const root = appRoot();
+  const spawned: { jobs: SpawnedChild; web: SpawnedChild } = {
+    jobs: spawnChild('node', [path.join(root, 'dist/jobs/run.mjs')]),
+    web: spawnChild('node', [path.join(root, 'dist/server/entry.mjs')]),
   };
-  const register = deps.registerSignal ?? registerSignal;
-  register('SIGTERM', () => killAll('SIGTERM'));
-  register('SIGINT', () => killAll('SIGINT'));
+  children = spawned;
+  log(`supervising web (pid ${spawned.web.pid ?? 'n/a'}) and jobs (pid ${spawned.jobs.pid ?? 'n/a'})`);
 
   return await new Promise<number>((resolve) => {
-    const watch = (name: string, child: SpawnedChild): void => {
-      child.on('exit', (code, signal) => {
-        alive -= 1;
-        if (shuttingDown) {
-          if (alive === 0) resolve(0);
-          return;
-        }
-        log(`${name} exited un-asked (code ${code}, signal ${signal}) — stopping the container`);
-        resolve(1);
-        killAll('SIGTERM');
-      });
+    let alive = 2;
+    let settled = false;
+    const finish = (code: number): void => {
+      if (settled) return;
+      settled = true;
+      resolve(code);
     };
-    watch('jobs', jobs);
-    watch('web', web);
+    const onEnded = (
+      name: string,
+      code: number | null,
+      signal: NodeJS.Signals | null,
+      failure?: Error,
+    ): void => {
+      if (stopRequested) {
+        alive -= 1;
+        if (alive === 0) finish(0);
+        return;
+      }
+      const why = failure
+        ? `failed to start (${failure.message})`
+        : `exited un-asked (code ${code}, signal ${signal})`;
+      log(`${name} ${why} — stopping the container`);
+      finish(1);
+      stopRequested = true;
+      if (children) {
+        children.jobs.kill('SIGTERM');
+        children.web.kill('SIGTERM');
+      }
+    };
+    const watch = (name: string, child: SpawnedChild): void => {
+      // Spawn failure emits `error` with NO `exit` — both count as a death.
+      child.on('error', (error: Error) => onEnded(name, null, null, error));
+      child.on('exit', (code: number | null, signal: NodeJS.Signals | null) =>
+        onEnded(name, code, signal),
+      );
+    };
+    watch('jobs', spawned.jobs);
+    watch('web', spawned.web);
   });
 }
 

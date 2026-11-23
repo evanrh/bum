@@ -2,8 +2,9 @@ import { scoreStars } from './scale.ts';
 
 // og:image must be an absolute raster URL (Discord: no SVG, ≥ 200×200) and
 // og:description truncates near ~350 chars there — hence the cap of 250.
-// The origin always comes from astro `site`: the node adapter rewrites
-// request origins away (issue #16), so Astro.url can never mint them.
+// The origin always comes from the runtime SITE_URL env, never from the
+// request: the node adapter rewrites request origins away (issue #16), so
+// Astro.url can never mint them (issue #39).
 const MAX_DESCRIPTION = 250;
 
 export const FALLBACK_BLURB =

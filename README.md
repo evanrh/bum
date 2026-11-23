@@ -111,3 +111,4 @@ the canonical data model, and the ticket index.
 | Week boundaries look off by an hour | Weeks are fixed Mondays 00:00 in `America/New_York` by design (single-operator deployment); DST shifts the clock, never the calendar week. |
 | Container signup rejects every join code | The bootstrap code is created once from `BOOTSTRAP_JOIN_CODE` (or printed to the container log) — make sure the env was set on the **first** boot; after that, rotate the code from `/admin`. |
 | Container exits with "SITE_URL is required at runtime" | Set `SITE_URL` (absolute http(s) URL) in the container env — compose reads your `.env`, `docker run` needs `-e SITE_URL=…`. |
+| Every page 500s with "no such table: settings" | The server was started directly (`dist/server/entry.mjs`) against an unmigrated database instead of through the image entrypoint. Run the image/compose as shipped (boot migrates first), or apply migrations once via `docker exec <container> node dist/jobs/migrate.mjs`. |

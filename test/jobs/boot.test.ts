@@ -1,4 +1,5 @@
-import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -9,18 +10,21 @@ import {
   prepareDataDir,
   resolveNodeIdentity,
   runBoot,
-  type BootDeps,
   type NodeIdentity,
   type SpawnedChild,
 } from '../../src/jobs/boot.ts';
 
+type ExitListener = (code: number | null, signal: NodeJS.Signals | null) => void;
+
 class FakeChild {
   pid = 4242;
   killedWith: string | null = null;
-  exitHandlers: Array<(code: number | null, signal: NodeJS.Signals | null) => void> = [];
+  exitHandlers: ExitListener[] = [];
+  errorHandlers: Array<(error: Error) => void> = [];
 
-  on(_event: 'exit', listener: (code: number | null, signal: NodeJS.Signals | null) => void): unknown {
-    this.exitHandlers.push(listener);
+  on(event: 'exit' | 'error', listener: ExitListener | ((error: Error) => void)): unknown {
+    if (event === 'exit') this.exitHandlers.push(listener as ExitListener);
+    else this.errorHandlers.push(listener as (error: Error) => void);
     return this;
   }
 
@@ -29,12 +33,24 @@ class FakeChild {
     return true;
   }
 
+  /** Simulate a child death (code or signal, mirroring the real event). */
   exit(code: number | null = null, signal: NodeJS.Signals | null = 'SIGTERM'): void {
-    for (const handler of [...this.exitHandlers]) handler(code, signal);
+    for (let handler of [...this.exitHandlers]) handler(code, signal);
+  }
+
+  /** Simulate a spawn failure: real children emit `error` with no `exit`. */
+  fail(error: Error): void {
+    for (let handler of [...this.errorHandlers]) handler(error);
   }
 }
 
 const asSpawned = (child: FakeChild): SpawnedChild => child as unknown as SpawnedChild;
+
+/**
+ * Yield one macrotask so runBoot's suspended body (awaited migrations)
+ * resumes and finishes spawning before the test pokes children/signals.
+ */
+const yieldToBody = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('resolveNodeIdentity', () => {
   it('reads uid/gid for the `node` user', () => {
@@ -46,6 +62,12 @@ describe('resolveNodeIdentity', () => {
     expect(resolveNodeIdentity(passwd)).toEqual({ uid: 1000, gid: 1000 });
   });
 
+  it('a malformed `node` line falls through to a later valid one', () => {
+    const passwd = path.join(mkdtempSync(path.join(tmpdir(), 'bum-boot-')), 'passwd');
+    writeFileSync(passwd, 'node:x:not-a-number:oops\nnode:x:1001:1001:node:/home/node:/bin/sh\n');
+    expect(resolveNodeIdentity(passwd)).toEqual({ uid: 1001, gid: 1001 });
+  });
+
   it('fails loudly when the user is missing or the file absent', () => {
     const passwd = path.join(mkdtempSync(path.join(tmpdir(), 'bum-boot-')), 'passwd');
     writeFileSync(passwd, 'root:x:0:0:root:/root:/bin/sh\n');
@@ -55,8 +77,8 @@ describe('resolveNodeIdentity', () => {
 });
 
 describe('prepareDataDir / chownTree', () => {
-  // Types flag the POSIX-only setters/getters as optional; the values exist
-  // on macOS and Linux alike.
+  // Types flag the POSIX-only getters as optional; the values exist on macOS
+  // and Linux alike.
   const identity = (): NodeIdentity => ({
     uid: typeof process.getuid === 'function' ? process.getuid() : 501,
     gid: typeof process.getgid === 'function' ? process.getgid() : 20,
@@ -66,14 +88,11 @@ describe('prepareDataDir / chownTree', () => {
     const base = mkdtempSync(path.join(tmpdir(), 'bum-data-'));
     const nested = path.join(base, 'sub');
     mkdirSync(nested);
-    const file = path.join(nested, 'bum.db');
-    writeFileSync(file, 'x');
-    const link = path.join(base, 'link-to-file');
-    symlinkSync(file, link);
+    writeFileSync(path.join(nested, 'bum.db'), 'x');
+    symlinkSync(path.join(nested, 'bum.db'), path.join(base, 'link-to-file'));
 
-    const target = path.join(base, 'new', 'tree');
-    expect(() => prepareDataDir(target, identity())).not.toThrow();
-    expect(chownTree(base, identity())).toBeUndefined();
+    expect(() => chownTree(base, identity())).not.toThrow();
+    expect(() => prepareDataDir(path.join(base, 'new', 'tree'), identity())).not.toThrow();
   });
 });
 
@@ -92,6 +111,16 @@ describe('runBoot', () => {
     if (savedDatabaseUrl === undefined) delete process.env.DATABASE_URL;
     else process.env.DATABASE_URL = savedDatabaseUrl;
   });
+
+  const childPair = (): { jobs: FakeChild; web: FakeChild } => ({
+    jobs: new FakeChild(),
+    web: new FakeChild(),
+  });
+
+  const fakeSpawn =
+    (pair: { jobs: FakeChild; web: FakeChild }) =>
+    (command: string, args: string[]): SpawnedChild =>
+      asSpawned(args[0].includes('run.mjs') ? pair.jobs : pair.web);
 
   it('preflights env first: missing SITE_URL throws before migrating or spawning', async () => {
     delete process.env.SITE_URL;
@@ -116,9 +145,8 @@ describe('runBoot', () => {
     process.env.DATABASE_URL = path.join(dataDir, 'bum.db');
     const effects: string[] = [];
     const identity = { uid: 1000, gid: 1000 };
-    const jobsChild = new FakeChild();
-    const webChild = new FakeChild();
-    const exitHandlers: Array<() => void> = [];
+    const pair = childPair();
+    const handlers = new Map<NodeJS.Signals, () => void>();
     const pending = runBoot({
       isRoot: () => true,
       resolveIdentity: () => identity,
@@ -132,65 +160,162 @@ describe('runBoot', () => {
         effects.push('migrations');
         return { count: 3 };
       },
-      registerSignal: (_signal, handler) => {
-        exitHandlers.push(handler);
+      registerSignal: (signal, handler) => {
+        handlers.set(signal, handler);
       },
-      spawn: (_command, args) => {
-        effects.push(`spawn:${args[0]}`);
-        return asSpawned(args[0].includes('run.mjs') ? jobsChild : webChild);
+      spawn: (command, args) => {
+        effects.push(`spawn:${path.basename(args[0])}`);
+        return fakeSpawn(pair)(command, args);
       },
       log: () => {},
     });
-    expect(effects).toEqual([`prepare:${dataDir}`, 'drop', 'migrations', 'spawn:dist/jobs/run.mjs', 'spawn:dist/server/entry.mjs']);
-    exitHandlers[0]?.(); // SIGTERM → container stop
-    expect(jobsChild.killedWith).toBe('SIGTERM');
-    webChild.exit(null);
-    jobsChild.exit(null);
+    await yieldToBody();
+    expect(effects).toEqual([
+      `prepare:${dataDir}`,
+      'drop',
+      'migrations',
+      'spawn:run.mjs',
+      'spawn:entry.mjs',
+    ]);
+    handlers.get('SIGTERM')?.();
+    expect(pair.jobs.killedWith).toBe('SIGTERM');
+    pair.web.exit(null);
+    pair.jobs.exit(null);
     expect(await pending).toBe(0);
   });
 
   it('non-root (local dev): migrates and supervises without privilege work', async () => {
     process.env.DATABASE_URL = path.join(mkdtempSync(path.join(tmpdir(), 'bum-local-')), 'bum.db');
     const effects: string[] = [];
-    const jobsChild = new FakeChild();
-    const webChild = new FakeChild();
-    const signalHandlers: Array<() => void> = [];
+    const pair = childPair();
+    const handlers = new Map<NodeJS.Signals, () => void>();
     const pending = runBoot({
       isRoot: () => false,
       applyMigrations: () => {
         effects.push('migrations');
         return { count: 2 };
       },
-      registerSignal: (_signal, handler) => {
-        signalHandlers.push(handler);
+      registerSignal: (signal, handler) => {
+        handlers.set(signal, handler);
       },
-      spawn: (_command, args) => {
-        effects.push(`spawn:${args[0]}`);
-        return asSpawned(args[0].includes('run.mjs') ? jobsChild : webChild);
+      spawn: (command, args) => {
+        effects.push(`spawn:${path.basename(args[0])}`);
+        return fakeSpawn(pair)(command, args);
       },
       log: () => {},
     });
-    expect(effects).toEqual(['migrations', 'spawn:dist/jobs/run.mjs', 'spawn:dist/server/entry.mjs']);
-    signalHandlers[0]?.(); // SIGTERM → clean shutdown request
-    expect(jobsChild.killedWith).toBe('SIGTERM');
-    expect(webChild.killedWith).toBe('SIGTERM');
-    webChild.exit(null);
-    jobsChild.exit(null);
+    await yieldToBody();
+    expect(effects).toEqual(['migrations', 'spawn:run.mjs', 'spawn:entry.mjs']);
+    handlers.get('SIGTERM')?.(); // container stop
+    expect(pair.jobs.killedWith).toBe('SIGTERM');
+    expect(pair.web.killedWith).toBe('SIGTERM');
+    pair.web.exit(null);
+    pair.jobs.exit(null);
     expect(await pending).toBe(0);
   });
 
-  it('a child dying un-asked stops the container with exit code 1', async () => {
-    const jobsChild = new FakeChild();
-    const webChild = new FakeChild();
+  it('a stop arriving during startup exits cleanly before spawning', async () => {
+    const effects: string[] = [];
+    const handlers = new Map<NodeJS.Signals, () => void>();
+    const pending = runBoot({
+      isRoot: () => false,
+      applyMigrations: () => {
+        effects.push('migrations');
+        return { count: 2 };
+      },
+      registerSignal: (signal, handler) => {
+        handlers.set(signal, handler);
+      },
+      spawn: () => {
+        throw new Error('must not spawn after a stop was requested');
+      },
+      log: () => {},
+    });
+    handlers.get('SIGINT')?.(); // docker stop while migrations run
+    expect(await pending).toBe(0);
+    expect(effects).toEqual(['migrations']);
+  });
+
+  it('a child failing to START (error, no exit) stops the container with exit 1', async () => {
+    const pair = childPair();
     const pending = runBoot({
       isRoot: () => false,
       applyMigrations: () => ({ count: 1 }),
       registerSignal: () => {},
-      spawn: (_command, args) => asSpawned(args[0].includes('run.mjs') ? jobsChild : webChild),
+      spawn: (command, args) => fakeSpawn(pair)(command, args),
       log: () => {},
     });
-    webChild.exit(1, null);
+    await yieldToBody();
+    pair.web.fail(new Error('EACCES spawning'));
     expect(await pending).toBe(1);
-    expect(jobsChild.killedWith).toBe('SIGTERM');
+    expect(pair.jobs.killedWith).toBe('SIGTERM');
+  });
+
+  it('both children dying un-asked resolves 1 without a second finish', async () => {
+    const pair = childPair();
+    const pending = runBoot({
+      isRoot: () => false,
+      applyMigrations: () => ({ count: 1 }),
+      registerSignal: () => {},
+      spawn: (command, args) => fakeSpawn(pair)(command, args),
+      log: () => {},
+    });
+    await yieldToBody();
+    pair.web.exit(1, null);
+    pair.jobs.exit(1, null);
+    expect(await pending).toBe(1);
+  });
+
+  it('runs the REAL spawn/signal path (no injected dependencies)', async () => {
+    // Real child_process with real exit events; only signal capture is
+    // swappable so the test can drive shutdown deterministically without
+    // sending OS signals to the vitest worker itself.
+    const handlers = new Map<NodeJS.Signals, () => void>();
+    const pending = runBoot({
+      isRoot: () => false,
+      applyMigrations: () => ({ count: 2 }),
+      registerSignal: (signal, handler) => {
+        handlers.set(signal, handler);
+      },
+      spawn: (command, args, options) => spawn(command, args, { stdio: 'ignore', ...options }),
+      log: () => {},
+    });
+    await yieldToBody();
+    handlers.get('SIGTERM')?.(); // real children get killed → exit events fire
+    expect(await pending).toBe(0);
+  });
+
+  it('root + :memory: skips data-dir preparation entirely', async () => {
+    process.env.DATABASE_URL = ':memory:';
+    const effects: string[] = [];
+    const pair = childPair();
+    const handlers = new Map<NodeJS.Signals, () => void>();
+    const pending = runBoot({
+      isRoot: () => true,
+      resolveIdentity: () => {
+        throw new Error('identity must not be needed for :memory:');
+      },
+      prepareDataDir: () => {
+        effects.push('prepare');
+      },
+      dropToNode: () => {
+        effects.push('drop');
+      },
+      applyMigrations: () => ({ count: 0 }),
+      registerSignal: (signal, handler) => {
+        handlers.set(signal, handler);
+      },
+      spawn: (command, args) => {
+        effects.push(`spawn:${path.basename(args[0])}`);
+        return fakeSpawn(pair)(command, args);
+      },
+      log: () => {},
+    });
+    await yieldToBody();
+    expect(effects).toEqual(['spawn:run.mjs', 'spawn:entry.mjs']);
+    handlers.get('SIGTERM')?.();
+    pair.web.exit(null);
+    pair.jobs.exit(null);
+    expect(await pending).toBe(0);
   });
 });

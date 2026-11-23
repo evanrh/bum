@@ -1,6 +1,8 @@
 # One container (issue #39): `boot` validates env, applies migrations, then
 # supervises the web server and the nightly cron as two processes of this
-# service.
+# service. The container starts as root on purpose: boot chowns ./data and
+# drops to the image's `node` user before spawning anything. No init/tini
+# is needed — boot reaps its two children itself.
 services:
   bum:
     build: .
