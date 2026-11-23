@@ -5,6 +5,9 @@
 # is needed — boot reaps its two children itself.
 services:
   bum:
+    # Pulls the published evanrh/bum image by default; `docker compose build`
+    # swaps in a from-source build tagged identically (see README).
+    image: evanrh/bum
     build: .
     environment:
       SITE_URL: "${SITE_URL:?SITE_URL is required at runtime — copy .env.example to .env or export it}"

@@ -1,5 +1,7 @@
 # Bum — album review club
 
+[![Docker Hub](https://img.shields.io/badge/docker-evanrh%2Fbum-blue?logo=docker)](https://hub.docker.com/r/evanrh/bum)
+
 A small, single-group web app for a group of friends: each week a different
 member is on rotation to submit one album, everyone rates it (half-stars),
 and a running record is kept.
@@ -44,14 +46,23 @@ npm run icon       # regenerate public/icon.png (favicon + OG fallback)
 
 ## Docker — one image, one container
 
+Install from Docker Hub (x64 + arm64):
+
+```sh
+docker pull evanrh/bum
+docker run --name bum -e SITE_URL=https://bum.example.com \
+  -v "$PWD/data:/data" -p 4321:4321 evanrh/bum
+```
+
 The image runs a `boot` entrypoint: it validates the environment, applies
 migrations, then supervises the web server and the nightly cron as two
 processes. Nothing is baked at build time — configure with env only.
 
 ```sh
-docker compose up -d --build  # one service: migrate + web :4321 + jobs
-docker compose ps             # one running container
-docker compose logs -f bum    # first run prints the join code once
+docker compose up -d        # pulls evanrh/bum — one service, one container
+docker compose build        # optional: swap in a from-source build
+docker compose ps           # one running container
+docker compose logs -f bum  # first run prints the join code once
 ```
 
 - `SITE_URL` (from your `.env` or environment) is **required at startup**
