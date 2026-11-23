@@ -2,33 +2,13 @@ import node from '@astrojs/node';
 import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'astro/config';
-import { loadEnv } from 'vite';
 
-// og:link origins must be baked at build — the node adapter rewrites
-// request origins away (issue #16), so SITE_URL fails the build instead.
-const envSite = process.env.SITE_URL ?? loadEnv(process.env.NODE_ENV ?? '', process.cwd(), 'SITE_URL').SITE_URL;
-const siteUrl = typeof envSite === 'string' ? envSite.trim() : '';
-if (siteUrl === '') {
-  throw new Error(
-    '[bum] SITE_URL is required at build time — the public origin baked into the OG links. Copy .env.example to .env, export SITE_URL, or pass it as a Docker build arg (see .env.example / README).',
-  );
-}
-let site;
-try {
-  const parsed = new URL(siteUrl);
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error(`protocol ${parsed.protocol}`);
-  }
-  site = parsed.toString();
-} catch (cause) {
-  throw new Error(`[bum] SITE_URL must be an absolute http(s) URL, got ${JSON.stringify(siteUrl)}`, {
-    cause,
-  });
-}
+// No `site` — the public origin (SITE_URL) is runtime env, validated at
+// container startup before anything runs; OG links mint from it per
+// request (issue #39). Nothing may depend on it at build time.
 
 // https://astro.build/config
 export default defineConfig({
-  site,
   output: 'server',
   adapter: node({ mode: 'standalone' }),
   // Astro's built-in CSRF check (checkOrigin defaults to true since 5.12)

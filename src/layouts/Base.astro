@@ -1,6 +1,7 @@
 ---
 import '../styles/global.css';
 import { getDb } from '../db/index.ts';
+import { siteOrigin } from '../lib/config.ts';
 import { submitEligibility, turnSummary } from '../lib/dashboard.ts';
 import { FALLBACK_BLURB, joinUrl, ogImage } from '../lib/opengraph.ts';
 
@@ -17,14 +18,11 @@ interface Props {
 
 const { title = 'Bum', og = {} } = Astro.props;
 
-// OG origins mint only from astro `site` — request origins are rewritten
-// by the node adapter (issue #16). The config makes `site` exist; the
-// type still says nullable, hence the throw.
-const site = Astro.site;
-if (!site) {
-  throw new Error('[bum] astro `site` is unset — SITE_URL must be set at build time (issue #31)');
-}
-const origin = site.origin;
+// OG origins mint only from the runtime SITE_URL env — request origins are
+// rewritten by the node adapter (issue #16), and nothing is baked at build
+// time anymore (issue #39). Missing/invalid env throws loudly here, next
+// to the boot entrypoint's preflight check.
+const origin = siteOrigin();
 
 const ogTitle = title;
 const ogDescription = og.description ?? FALLBACK_BLURB;
