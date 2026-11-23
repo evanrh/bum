@@ -43,6 +43,8 @@ if [ -z "$BASE_URL" ]; then
   LAST_BODY="$LOG_FILE"
   SMOKE_DB="$(mktemp -t bum-smoke-db-XXXXXX).db"
   DATABASE_URL="$SMOKE_DB" node dist/jobs/migrate.mjs >/dev/null
+  # Runtime OG links need a SITE_URL even for local smoke (issue #39).
+  SITE_URL="${SITE_URL:-http://127.0.0.1:4399}" \
   DATABASE_URL="$SMOKE_DB" \
     BOOTSTRAP_JOIN_CODE="$JOIN_CODE" \
     HOST=127.0.0.1 PORT=4399 \
@@ -92,6 +94,8 @@ expect_status "$status" 201 "member D signup"
 status="$(get "$BASE_URL/")"
 expect_status "$status" 200 "GET /"
 grep -q "album review club" "$TMP_OUT" || die "GET / is missing the club name"
+# Runtime OG links (issue #39): og:url must mint from the SITE_URL env.
+grep -q 'og:url" content="http://127.0.0.1:4399/"' "$TMP_OUT" || die "og:url is not derived from the runtime SITE_URL"
 
 # 4. the admin (queue head) submits with a real Spotify URL --------------------
 status="$(post -b "$JAR_A" -X POST "$BASE_URL/api/albums" -d '{"title":"Kind of Blue","artist":"Miles Davis","year":1959,"spotify_url":"https://open.spotify.com/album/1weenld61qoidwYuZ1GESA"}')"

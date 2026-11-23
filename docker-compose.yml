@@ -1,56 +1,17 @@
-# SITE_URL bakes the OG-link origin into the image (issue #31).
-x-build: &build
-  context: .
-  args:
-    SITE_URL: "${SITE_URL:?SITE_URL is required — copy .env.example to .env, or export it (baked into the image for OG links, issue #31)}"
-
+# One container (issue #39): `boot` validates env, applies migrations, then
+# supervises the web server and the nightly cron as two processes of this
+# service.
 services:
-  migrate:
-    build: *build
-    # One-shot owner: prepares the bind-mounted data dir for the node user.
-    user: "0:0"
-    entrypoint:
-      - sh
-      - -c
-      - mkdir -p /data && node dist/jobs/migrate.mjs && chown -R node:node /data
+  bum:
+    build: .
     environment:
-      DATABASE_URL: /data/bum.db
-    volumes:
-      - ./data:/data
-    restart: "no"
-  covers:
-    build: *build
-    # One-shot (issue #27): reconciles cover art for rows inserted while the
-    # Spotify oEmbed endpoint was broken (#14). Idempotent — exits
-    # immediately when nothing is missing — so it is safe on every up.
-    # Network failures exit 1 but never block the web service (web depends
-    # only on migrate).
-    entrypoint:
-      - node
-      - dist/jobs/backfill-covers.mjs
-    environment:
-      DATABASE_URL: /data/bum.db
-    volumes:
-      - ./data:/data
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-    restart: "no"
-  web:
-    build: *build
-    environment:
-      DATABASE_URL: /data/bum.db
-      HOST: 0.0.0.0
-      PORT: "4321"
+      SITE_URL: "${SITE_URL:?SITE_URL is required at runtime — copy .env.example to .env or export it}"
       BOOTSTRAP_JOIN_CODE: ${BOOTSTRAP_JOIN_CODE:-}
     ports:
       - "4321:4321"
     volumes:
       - ./data:/data
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-    init: true
+    restart: unless-stopped
     healthcheck:
       test:
         - CMD
@@ -62,18 +23,3 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
-  jobs:
-    build: *build
-    entrypoint:
-      - node
-      - dist/jobs/run.mjs
-    environment:
-      DATABASE_URL: /data/bum.db
-      JOBS_CRON: "on"
-      BOOTSTRAP_JOIN_CODE: ${BOOTSTRAP_JOIN_CODE:-}
-    volumes:
-      - ./data:/data
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-    init: true

@@ -14,14 +14,15 @@ RUN apk add --no-cache python3 make g++ && npm ci --include=dev
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# SITE_URL bakes the OG-link origin into the image (issue #31).
-ARG SITE_URL
-ENV SITE_URL=$SITE_URL
-# Astro → dist/ (dist/server/entry.mjs under Astro 5)
+# Astro → dist/ (dist/server/entry.mjs under Astro 5). No SITE_URL here:
+# the public origin is runtime env now (issue #39).
 RUN npm run build
 # Server-only Node entries (no Astro/Vite): native node runs these with
 # the runtime's node_modules — everything stays --packages=external.
-RUN ./node_modules/.bin/esbuild src/db/migrate.ts \
+RUN ./node_modules/.bin/esbuild src/jobs/boot.ts \
+      --bundle --platform=node --format=esm --packages=external --sourcemap \
+      --outfile=dist/jobs/boot.mjs && \
+    ./node_modules/.bin/esbuild src/db/migrate.ts \
       --bundle --platform=node --format=esm --packages=external --sourcemap \
       --outfile=dist/jobs/migrate.mjs && \
     ./node_modules/.bin/esbuild src/jobs/run.ts \
@@ -41,5 +42,9 @@ COPY --from=build /app/dist ./dist
 COPY drizzle ./drizzle
 RUN mkdir -p /data && chown node:node /data
 USER node
+# Image defaults so a plain `docker run` needs only SITE_URL.
+ENV DATABASE_URL=/data/bum.db
 ENV HOST=0.0.0.0 PORT=4321
-ENTRYPOINT ["node", "dist/server/entry.mjs"]
+# boot.mjs validates env, prepares /data + drops privileges, migrates, then
+# supervises web + the cron jobs (issue #39).
+ENTRYPOINT ["node", "dist/jobs/boot.mjs"]
