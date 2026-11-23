@@ -3,7 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { getDb, type Db } from '../db/index.ts';
-import { applyMigrations } from '../db/migrate.ts';
+import { applyMigrations } from '../db/migrations.ts';
 import { TIMEZONE } from '../lib/rotation.ts';
 import { advanceRotation, type AdvanceOptions } from './advance.ts';
 

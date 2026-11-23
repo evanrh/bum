@@ -2,7 +2,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { createDatabase } from '../db/index.ts';
-import { applyMigrations } from '../db/migrate.ts';
+import { applyMigrations } from '../db/migrations.ts';
 import { backfillCovers } from '../lib/covers.ts';
 
 /**
