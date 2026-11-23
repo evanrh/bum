@@ -59,15 +59,15 @@ they bind every change.
 | Interactive UI | React 19 islands (`client:load`/`client:visible`) inside server-rendered Astro shells |
 | Styling | Tailwind CSS v4 via `@tailwindcss/vite`; no other CSS system |
 | Database | SQLite via `better-sqlite3` (synchronous driver), WAL mode |
-| ORM / migrations | Drizzle ORM; `drizzle-kit generate` authoring, migrations applied programmatically (`src/db/migrate.ts`) and as a one-shot compose step |
+| ORM / migrations | Drizzle ORM; `drizzle-kit generate` authoring, migrations applied programmatically **at container startup** by the boot entrypoint (`src/db/migrate.ts` stays the manual lever) — issue #39 retired the compose one-shot |
 | Auth | Per-user username + password (bcrypt, cost 12); rotatable join code gates signup; server-side in-memory sessions via HttpOnly cookie — clear on process restart (owner-accepted) |
-| Scheduled jobs | node-cron in a separate long-lived process (its own container in compose); runs daily `00:15 America/New_York` |
+| Scheduled jobs | node-cron runner supervised **inside the single app container** (issue #39 — formerly its own container, spawned by `dist/jobs/boot.mjs` after migrations); runs daily `00:15 America/New_York` |
 | Rotation | Explicit queue: `settings.rotation` (JSON array of user ids, head = current picker). Weeks are calendar Mondays `00:00` in hardcoded `America/New_York` — single-operator deployment, no per-deployment tz config |
 | Validation | Zod at every boundary (HTTP payloads, settings updates) |
 | Language / runtime | TypeScript (strict, `erasableSyntaxOnly`), Node >= 24 |
 | Runtime TS execution | Node 24 native type-stripping — all intra-project imports include the `.ts` extension; no enums/namespaces/parameter properties |
 | Testing | Vitest + `@vitest/coverage-v8`; RTL for React islands; coverage ≥ 80% statements/lines/functions, ≥ 75% branches over `src/lib`, `src/db`, `src/jobs` (via `npm run test:coverage`) |
-| OG unfurls & site origin | `site:` in astro.config baked at build from a **required** `SITE_URL` env (build fails without it; Docker build ARG, compose `${SITE_URL:?}`). Absolute OG URLs derive from `Astro.site` only — never `Astro.url`'s origin (node adapter rewrite, issue #16). A favicon PNG doubles as the fallback `og:image` |
+| OG unfurls & site origin | `SITE_URL` is a **runtime** requirement (issue #39; supersedes issue #31's build-time bake): validated at container startup before any action, minted from `process.env` per request. Absolute OG URLs derive from the env only — never `Astro.url`'s request origin (node adapter rewrite, issue #16). A favicon PNG doubles as the fallback `og:image` |
 
 ## Canonical data model
 
@@ -243,8 +243,10 @@ always Mondays.
   `https://i.ytimg.com/vi/{id}/hqdefault.jpg`. Resolution runs at album
   insert; `npm run covers:backfill` (bundled as
   `dist/jobs/backfill-covers.mjs`) re-runs the same semantics for rows
-  inserted without a cover; the compose `covers` one-shot runs it on
-  every deploy so the live database self-heals (issue #27). Failure is
+  inserted without a cover; since issue #39 the backfill is a **manual
+  lever** (`docker exec <container> node dist/jobs/backfill-covers.mjs` —
+  exits 1 when some resolutions fail so it can simply be re-run), having
+  retired the compose covers one-shot from issue #27. Failure is
   non-fatal: `cover_url` stays null and the UI shows a gradient placeholder.
 
 ## Conventions
