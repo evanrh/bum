@@ -16,13 +16,12 @@ env:
 
 jobs:
   build:
-    # One native runner per architecture (no QEMU — emulated arm64 builds
-    # were the multi-tens-of-minutes risk, issue #46). Each job pushes its
-    # image BY DIGEST to Docker Hub; the release job then merges both
-    # digests into one multi-arch manifest, so nothing is referenced by a
-    # tag until both architectures exist.
+    # One native runner per architecture (no QEMU — issue #46). Each job
+    # pushes its image BY DIGEST to Docker Hub; the release job merges both
+    # digests into one multi-arch manifest once the smoke is green.
     name: build (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -62,9 +61,81 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  release:
+  smoke:
+    # Boot the amd64 image that was just pushed (by digest) and check the
+    # container guarantees — via `docker exec` against the RUNNING
+    # container (exec has no entrypoint interposition, so a "run this
+    # binary" check can never be swallowed by the boot entrypoint, which is
+    # what hung run 45304631203). Every command is timeboxed and the job is
+    # capped: no smoke mistake can hang a release again. Manifest merge is
+    # gated on this: a failed smoke means nothing gets tagged.
+    name: live smoke (amd64)
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: digests-linux-amd64
+          path: /tmp/digests
+      - name: boot (entrypoint only — no command args)
+        run: |
+          set -euo pipefail
+          AMD_HEX="$(find /tmp/digests -type f -printf '%f\n' | head -1)"
+          echo "$AMD_HEX" | grep -qE '^[0-9a-f]{64}$'
+          # A fresh install's bind source is root-owned by default — keep it
+          # that way so the container's root preflight + chown is exercised.
+          sudo rm -rf /tmp/bum-data && sudo mkdir -p /tmp/bum-data
+          docker run -d --name bum-ci \
+            -e SITE_URL=http://127.0.0.1:4321 -e BOOTSTRAP_JOIN_CODE=cismokecode \
+            -v /tmp/bum-data:/data -p 127.0.0.1:4321:4321 \
+            ${{ env.IMAGE }}@sha256:"$AMD_HEX"
+
+      - name: checks (exec inside the running container)
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 45); do
+            curl -sf http://127.0.0.1:4321/api/health >/dev/null 2>&1 && break
+            sleep 2
+          done
+          timeout 30 curl -sf http://127.0.0.1:4321/api/health | grep -q '"ok":true'
+          timeout 30 curl -sf http://127.0.0.1:4321/ | grep -q 'og:url" content="http://127.0.0.1:4321/"'
+          timeout 30 docker logs bum-ci 2>&1 | grep -q 'migrations applied'
+          timeout 30 docker logs bum-ci 2>&1 | grep -q 'jobs runner ready'
+          # A pinned BOOTSTRAP_JOIN_CODE is honored silently — the code must
+          # never appear in the logs (only a generated one is shown once).
+          if timeout 30 docker logs bum-ci 2>&1 | grep -q 'bootstrap join code:'; then
+            echo 'pinned join code leaked into the container log'
+            docker logs bum-ci | tail -20
+            exit 1
+          fi
+          # The covers lever — via exec, on the same data. Root-owned WAL
+          # files would break it, so this also asserts the drop-to-node.
+          timeout 60 docker exec -u node bum-ci \
+            node dist/jobs/backfill-covers.mjs
+
+      - name: checks — preflight refuses a missing SITE_URL
+        run: |
+          set -euo pipefail
+          # SITE_URL is scrubbed via exec's env override; the boot entrypoint
+          # must exit 1 immediately — before any fs/db work — with the
+          # actionable message. Exec cannot be swallowed by entrypoint
+          # interposition, and timeout bounds it regardless.
+          if timeout 60 docker exec -e SITE_URL= bum-ci node dist/jobs/boot.mjs >/tmp/pf.log 2>&1; then
+            echo 'preflight must refuse a blank SITE_URL'
+            cat /tmp/pf.log
+            exit 1
+          fi
+          grep -q 'SITE_URL is required at runtime' /tmp/pf.log
+
+      - name: teardown
+        if: always()
+        run: docker rm -f bum-ci
+
+  release:
+    needs: smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: download digests
         uses: actions/download-artifact@v4
