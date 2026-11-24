@@ -171,13 +171,17 @@ always Mondays.
 - **Backlog auto-queue (issue #18)** — members can queue albums ahead of
   their own weeks (`/backlog`: add, reorder, remove; per-member
   `auto_backlog` toggle, on by default). When a member's turn comes up —
-  the weekly advance **and** admin skip/override — the first queued item
-  becomes that week's submission automatically (same validation/cover
-  resolution as /submit; the item leaves the backlog; audited as system
-  action `backlog.auto_submit`). A taken week is never overwritten; with
-  the toggle off nothing happens and the queue is untouched. Multi-week
-  catch-up advances fill only the current week, never skipped-outage
-  weeks.
+  the weekly advance, admin skip/override, or the admin manual trigger
+  (issue #44: `POST /api/admin/rotation/backlog-fill` runs the same fill
+  for the current picker and current week without touching the queue;
+  every no-op answers 409 with its reason; the pull is audited as
+  `backlog.manual_trigger` by the acting admin **on top of** the system
+  row) — the first queued item becomes that week's submission
+  automatically (same validation/cover resolution as /submit; the item
+  leaves the backlog; audited as system action `backlog.auto_submit`). A
+  taken week is never overwritten; with the toggle off nothing happens
+  and the queue is untouched. Multi-week catch-up advances fill only the
+  current week, never skipped-outage weeks.
 - **Membership changes** — signup appends the new user's id to the back
   of the queue (T03). Admin reorder rewrites the whole array (T07).
   Deactivating a member removes their id from the queue wherever it

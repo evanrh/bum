@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 
 import * as albumsRepo from '../../src/db/repos/albums.ts';
 import * as auditRepo from '../../src/db/repos/audit.ts';
+import * as backlogRepo from '../../src/db/repos/backlog.ts';
 import * as ratingsRepo from '../../src/db/repos/ratings.ts';
 import * as settingsRepo from '../../src/db/repos/settings.ts';
 import * as usersRepo from '../../src/db/repos/users.ts';
@@ -18,6 +19,7 @@ import {
   setOrder,
   skipCurrent,
   toggleJoining,
+  triggerBacklogFill,
   updateGroupName,
   userAction,
 } from '../../src/lib/api/admin.ts';
@@ -338,6 +340,88 @@ describe('rotation select (arbitrary override, issue #17)', () => {
   it('is guarded like every admin mutation', async () => {
     expect((await selectPicker(db, null, { user_id: members.bob.id }, now)).status).toBe(401);
     expect((await selectPicker(db, await memberUser(members.bob), { user_id: members.bob.id }, now)).status).toBe(403);
+  });
+});
+
+describe('backlog fill lever (manual trigger, issue #44)', () => {
+  const queueHead = async (userId: number, titles: string[]): Promise<void> => {
+    for (const title of titles) {
+      await backlogRepo.appendBacklogItem(db, { id: crypto.randomUUID(), userId, title, artist: `Artist of ${title}` }, now);
+    }
+  };
+
+  const currentWeek = async (): Promise<string> => {
+    const { weekId } = await import('../../src/lib/rotation.ts');
+    return weekId(new Date(now));
+  };
+
+  it('is guarded like every admin mutation', async () => {
+    expect((await triggerBacklogFill(db, null)).status).toBe(401);
+    expect((await triggerBacklogFill(db, await memberUser(members.bob))).status).toBe(403);
+  });
+
+  it('runs the weekly-advance check for the current picker without touching the queue', async () => {
+    await queueHead(members.bob.id, ['Head Album', 'Back Album']);
+    const week = await currentWeek();
+
+    const response = await triggerBacklogFill(db, admin, now);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      submitted: boolean; detail: string; picker: { id: number; displayName: string }; week: string;
+    };
+    expect(body.submitted).toBe(true);
+    expect(body.detail).toContain('Head Album');
+    expect(body.picker).toMatchObject({ id: members.bob.id, displayName: 'bob' });
+    expect(body.week).toBe(week);
+
+    expect(await albumsRepo.getAlbumByWeekStart(db, week)).toMatchObject({
+      title: 'Head Album',
+      submittedBy: members.bob.id,
+    });
+    expect((await backlogRepo.listBacklogItems(db, members.bob.id)).map((item) => item.title)).toEqual(['Back Album']);
+    // The lever only fills — queue and checkpoint stay as they were.
+    expect(await settingsRepo.getRotation(db)).toEqual([members.bob.id, members.carol.id, members.dave.id, members.admin.id]);
+
+    // Who pulled the lever, on top of the system row the function writes.
+    const audits = await auditRepo.listRecentAudit(db, 5);
+    expect(audits[0].action).toBe('backlog.manual_trigger');
+    expect(audits[0].actorUsername).toBe('admin');
+    expect(audits[0].detail).toContain('Head Album');
+    expect(audits[1].action).toBe('backlog.auto_submit');
+    expect(audits[1].actorUsername).toBeNull();
+  });
+
+  it('answers each no-op distinctly: no items, auto-queue off, week taken', async () => {
+    const nothing = await triggerBacklogFill(db, admin, now);
+    expect(nothing.status).toBe(409);
+    expect((await nothing.json()).error).toBe('bob has nothing queued in their backlog');
+
+    // Queued item but the toggle went off — nothing submitted, nothing consumed.
+    await queueHead(members.bob.id, ['Staying']);
+    await usersRepo.setAutoBacklog(db, members.bob.id, false);
+    const off = await triggerBacklogFill(db, admin, now);
+    expect(off.status).toBe(409);
+    expect((await off.json()).error).toBe('auto-queue is off for bob — turn it on or submit manually');
+    expect((await backlogRepo.listBacklogItems(db, members.bob.id)).map((item) => item.title)).toEqual(['Staying']);
+
+    // Week already has an album — the queued item stays pending.
+    await usersRepo.setAutoBacklog(db, members.bob.id, true); // re-enable from the previous leg
+    const week = await currentWeek();
+    await albumsRepo.insertAlbum(db, {
+      title: 'Manual Pick', artist: 'Someone', submittedBy: members.bob.id, submittedAt: now, weekStart: week,
+    });
+    const taken = await triggerBacklogFill(db, admin, now);
+    expect(taken.status).toBe(409);
+    expect((await taken.json()).error).toBe(`week ${week} already has an album — nothing was changed`);
+    expect((await backlogRepo.listBacklogItems(db, members.bob.id)).map((item) => item.title)).toEqual(['Staying']);
+    expect((await albumsRepo.getAlbumByWeekStart(db, week))?.title).toBe('Manual Pick');
+  });
+
+  it('empty rotation → 409', async () => {
+    await settingsRepo.setRotation(db, [], now);
+    const response = await triggerBacklogFill(db, admin, now);
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toBe('nothing to fill — the rotation is empty');
   });
 });
 
