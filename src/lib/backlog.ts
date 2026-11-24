@@ -98,33 +98,49 @@ export async function setAutoQueue(user: User, db: Db, input: unknown): Promise<
 
 export type AutoSubmitOptions = { now?: number; log?: (message: string) => void };
 
+/** Why nothing was submitted — lets no-op callers speak distinctly. */
+export type BacklogSkipReason =
+  | 'no_picker'
+  | 'picker_inactive'
+  | 'auto_queue_off'
+  | 'no_queued_items'
+  | 'week_taken'
+  | 'insert_conflict';
+
+export type AutoSubmitResult =
+  | { submitted: true; detail: string }
+  | { submitted: false; reason: BacklogSkipReason };
+
 /**
  * If the picker queued albums and auto-queueing is on for them, their head
  * item becomes the submitted album for the given week (the item leaves the
  * backlog). Never throws, runs as the system (actor null in the audit log)
- * and reports what happened so callers can log it. Returns what was used.
+ * and reports what happened — including why nothing did — so callers can
+ * log it or answer for it.
  */
 export async function autoSubmitBacklogHead(
   db: Db,
   pickerId: number | null,
   week: string,
   opts: AutoSubmitOptions = {},
-): Promise<{ submitted: boolean; detail?: string }> {
+): Promise<AutoSubmitResult> {
   const log = opts.log ?? (() => {});
   const now = opts.now ?? Date.now();
-  if (pickerId === null) return { submitted: false };
+  if (pickerId === null) return { submitted: false, reason: 'no_picker' };
 
   const picker = await usersRepo.getUserById(db, pickerId);
-  if (!picker || !picker.isActive || !picker.autoBacklog) return { submitted: false };
+  if (!picker) return { submitted: false, reason: 'no_picker' };
+  if (!picker.isActive) return { submitted: false, reason: 'picker_inactive' };
+  if (!picker.autoBacklog) return { submitted: false, reason: 'auto_queue_off' };
 
   const head = await backlogRepo.backlogHead(db, pickerId);
-  if (!head) return { submitted: false };
+  if (!head) return { submitted: false, reason: 'no_queued_items' };
 
   if (await albumsRepo.getAlbumByWeekStart(db, week)) {
     // Defensive: the week is already taken (manual submit, or a re-run) —
     // the queued item stays pending for a later week.
     log(`[backlog] week ${week} already has an album; ${picker.displayName}'s queue keeps its head`);
-    return { submitted: false };
+    return { submitted: false, reason: 'week_taken' };
   }
 
   const result = await albumsRepo.insertAlbum(db, {
@@ -141,7 +157,7 @@ export async function autoSubmitBacklogHead(
   });
   if (!result.ok) {
     log(`[backlog] auto-submit for ${picker.displayName} hit a conflict: ${result.reason}`);
-    return { submitted: false };
+    return { submitted: false, reason: 'insert_conflict' };
   }
   await backlogRepo.removeBacklogItem(db, head.id, pickerId);
   const detail = `${picker.displayName}'s queued "${head.title}" auto-submitted for week ${week}`;

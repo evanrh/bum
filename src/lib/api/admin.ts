@@ -393,6 +393,61 @@ export async function selectPicker(
   }
 }
 
+/**
+ * POST /api/admin/rotation/backlog-fill (issue #44) — run the same trigger
+ * the weekly advance runs, for the member who is already the picker, this
+ * week. The queue and checkpoint are untouched; every no-op answers
+ * distinctly (409) so the lever stays actionable instead of guessing.
+ */
+export async function triggerBacklogFill(db: Db, admin: User | null, now: number = Date.now()): Promise<Response> {
+  try {
+    const acting = requireAdmin({ user: admin });
+    const current = await settingsRepo.getSettings(db, now);
+    const queue = parseQueueJson(current.rotation);
+    if (queue.length === 0) throw new ApiError(409, 'nothing to fill — the rotation is empty');
+    const pickerId = queue[0];
+    const picker = await usersRepo.getUserById(db, pickerId);
+    if (!picker || !picker.isActive) throw new ApiError(409, 'the current picker is inactive');
+
+    const week = currentTurn({ rotation: current.rotation }, new Date(now)).week;
+    // The function is the authority: it re-checks everything and runs as the
+    // system (its own backlog.auto_submit audit row). Failures here can only
+    // be races — still answered with a reason, never a bare 500.
+    const result = await autoSubmitBacklogHead(db, picker.id, week, { now });
+    if (!result.submitted) {
+      if (result.reason === 'no_queued_items') {
+        throw new ApiError(409, `${picker.displayName} has nothing queued in their backlog`);
+      }
+      if (result.reason === 'auto_queue_off') {
+        throw new ApiError(409, `auto-queue is off for ${picker.displayName} — turn it on or submit manually`);
+      }
+      if (result.reason === 'week_taken') {
+        throw new ApiError(409, `week ${week} already has an album — nothing was changed`);
+      }
+      throw new ApiError(409, `nothing was filled (${result.reason})`);
+    }
+
+    // On top of the system backlog.auto_submit row: the audit page should
+    // show who pulled the lever, not only that it was pulled.
+    await auditRepo.recordAudit(
+      db,
+      { actorUserId: acting.id, action: 'backlog.manual_trigger', detail: result.detail },
+      now,
+    );
+    return new Response(
+      JSON.stringify({
+        submitted: true,
+        detail: result.detail,
+        picker: { id: picker.id, displayName: picker.displayName },
+        week,
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  } catch (error) {
+    return jsonError(error);
+  }
+}
+
 /** POST /api/admin/join-code — the plaintext is shown exactly once. */
 export async function rotateJoinCode(db: Db, admin: User | null, now: number = Date.now()): Promise<Response> {
   try {

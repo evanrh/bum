@@ -1,5 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
+import { AdminBacklogFill } from '../components/islands/AdminBacklogFill.tsx';
 import { AdminJoinCode } from '../components/islands/AdminJoinCode.tsx';
 import { AdminRotation } from '../components/islands/AdminRotation.tsx';
 import { AdminSkip } from '../components/islands/AdminSkip.tsx';
@@ -70,6 +71,11 @@ const audit = isAdmin ? await auditRepo.listRecentAudit(db, 50) : [];
           nextPickerName={nextPickerName}
           hasAlbum={Boolean(weekAlbum)}
           queue={queue.map((memberId) => ({ id: memberId, name: namesById.get(memberId) ?? `#${memberId}` }))}
+        />
+        <AdminBacklogFill
+          client:visible
+          week={summary!.week}
+          pickerName={namesById.get(summary!.pickerId ?? -1) ?? 'nobody'}
         />
       </section>
 

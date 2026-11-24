@@ -166,7 +166,10 @@ describe('autoSubmitBacklogHead', () => {
     expect((await usersRepo.getUserById(db, fixture.bob.id))?.autoBacklog).toBe(true);
     await setAutoQueue(user, db, { enabled: false });
     const disabled = (await usersRepo.getUserById(db, fixture.bob.id))!;
-    expect((await autoSubmitBacklogHead(db, fixture.bob.id, week(), { now })).submitted).toBe(false);
+    expect(await autoSubmitBacklogHead(db, fixture.bob.id, week(), { now })).toEqual({
+      submitted: false,
+      reason: 'auto_queue_off',
+    });
     expect(await albumsRepo.getAlbumByWeekStart(db, week())).toBeUndefined();
 
     await setAutoQueue(disabled, db, { enabled: true });
@@ -185,15 +188,24 @@ describe('autoSubmitBacklogHead', () => {
       weekStart: week(),
     });
     const result = await autoSubmitBacklogHead(db, fixture.bob.id, week(), { now });
-    expect(result.submitted).toBe(false);
+    expect(result).toEqual({ submitted: false, reason: 'week_taken' });
     expect((await backlogRepo.listBacklogItems(db, fixture.bob.id))).toHaveLength(2); // nothing consumed
     expect((await albumsRepo.getAlbumByWeekStart(db, week()))?.title).toBe('Manual Pick');
   });
 
   it('no queue → nothing submitted; null picker → nothing; unknown picker → nothing', async () => {
-    expect((await autoSubmitBacklogHead(db, fixture.bob.id, week(), { now })).submitted).toBe(false);
-    expect((await autoSubmitBacklogHead(db, null, week(), { now })).submitted).toBe(false);
-    expect((await autoSubmitBacklogHead(db, 999999, week(), { now })).submitted).toBe(false);
+    expect(await autoSubmitBacklogHead(db, fixture.bob.id, week(), { now })).toEqual({
+      submitted: false,
+      reason: 'no_queued_items',
+    });
+    expect(await autoSubmitBacklogHead(db, null, week(), { now })).toEqual({
+      submitted: false,
+      reason: 'no_picker',
+    });
+    expect(await autoSubmitBacklogHead(db, 999999, week(), { now })).toEqual({
+      submitted: false,
+      reason: 'no_picker',
+    });
     expect(await albumsRepo.getAlbumByWeekStart(db, week())).toBeUndefined();
   });
 });
