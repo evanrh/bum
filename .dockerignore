@@ -1,13 +1,15 @@
+# Keep the image build independent of host state (issue #48): the deps
+# stage builds the Linux tree from package.json+lock — the host's
+# node_modules must never overlay it (Darwin binaries would shadow the
+# musl-built ones), and neither the git history nor local data belongs in
+# the build context.
 node_modules
 dist
 .astro
-data
 .git
-.gitignore
+data
 coverage
-.env
-.env.*
+.env*
 !.env.example
-*.log
-Dockerfile
-docker-compose.yml
+npm-debug.log*
+.DS_Store

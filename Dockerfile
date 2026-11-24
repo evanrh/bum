@@ -5,10 +5,15 @@ FROM node:24-alpine AS base
 WORKDIR /app
 ENV NODE_ENV=production
 
-# ---- deps: full dependency tree (incl. dev) for the build stages --------
+# ---- deps: full dependency tree (incl. dev) for the build stage ---------
+# --ignore-scripts: every native package ships prebuilt binaries
+# (better-sqlite3 even embeds them, but its v13 install script still
+# shells out to node-gyp — which npm ci runs unconditionally, unlike
+# npm install — and would demand a python/make/g++ toolchain for nothing
+# that isn't already shipped, issue #48).
 FROM base AS deps
 COPY package.json package-lock.json ./
-RUN apk add --no-cache python3 make g++ && npm ci --include=dev
+RUN npm ci --ignore-scripts --include=dev
 
 # ---- build: astro output + esbuilt node entries -------------------------
 FROM base AS build
@@ -31,13 +36,15 @@ RUN ./node_modules/.bin/esbuild src/jobs/boot.ts \
     ./node_modules/.bin/esbuild src/jobs/backfill-covers.ts \
       --bundle --platform=node --format=esm --packages=external --sourcemap \
       --outfile=dist/jobs/backfill-covers.mjs
+# The runtime tree: prod-only (issue #48) — the runtime stage copies it
+# and installs nothing itself.
+RUN npm prune --omit=dev && \
+    rm -f node_modules/better-sqlite3/prebuilds/darwin-*.node \
+          node_modules/better-sqlite3/prebuilds/win32-*.node
 
-# ---- runtime: production deps only --------------------------------------
+# ---- runtime: prebuilt prod tree, no installer, no toolchain ------------
 FROM base AS runtime
-# Build tools for better-sqlite3's native binding if no musl prebuild hits.
-RUN apk add --no-cache python3 make g++
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY drizzle ./drizzle
 # Image defaults so a plain `docker run` needs only SITE_URL.
