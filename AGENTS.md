@@ -33,6 +33,12 @@ of 2026-11-21, issue #31; T01–T09 remain there as history.)
    `git checkout main && git merge --ff-only <branch> && git push`.
    `main` therefore stays linear — no merge-bubble commits — and merged
    branches are deleted.
+   **Version bump at merge:** every merge to `main` bumps the `version`
+   in `package.json` — SemVer pre-1.0: **minor** for features, **patch**
+   for fixes/docs/chore (owner call trumps this, e.g. hotfixes). Prefer
+   including the bump in the issue's final PR commit; if it was missed,
+   it lands as a direct `chore: bump version to x.y.z` commit on `main`
+   (owner-approved exception to rule 2) without ceremony.
 4. **One issue per branch per agent run.** Dependent work stacks:
    branch off the branch you depend on and open the dependency PRs
    first — the owner merges them **in dependency order** before the
