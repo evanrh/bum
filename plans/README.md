@@ -71,7 +71,7 @@ they bind every change.
 
 ## Canonical data model
 
-Five tables. Timestamps are `INTEGER` unix epoch **milliseconds**; week
+Six tables. Timestamps are `INTEGER` unix epoch **milliseconds**; week
 identifiers are `TEXT` ISO `YYYY-MM-DD` dates. Booleans are `INTEGER`
 0/1. The schema lives in `src/db/schema.ts`.
 
@@ -134,7 +134,21 @@ audit_log
   action TEXT NOT NULL          -- 'queue.advance' | 'queue.override' | …
   detail TEXT                   -- short human-readable summary
   created_at INTEGER NOT NULL
+
+avatars (issue #50 — one optional profile picture per member)
+  user_id INTEGER PK REFERENCES users(id) ON DELETE CASCADE
+  content_type TEXT NOT NULL    -- image/png | image/jpeg | image/webp (server-sniffed)
+  data BLOB NOT NULL            -- raw uploaded bytes, ≤ 2 MiB, stored as-is
+  updated_at INTEGER NOT NULL
 ```
+
+Profile pictures deliberately live in their **own table** rather than
+`users` columns, so session resolution and member listings never drag
+image bytes around — only the serving route (`GET /api/avatars/[id]`,
+signed-in active sessions only) and the settings flow read this table.
+Uploaded bytes are stored unprocessed (no image dependency; the UI
+square-crops with CSS) in the same SQLite file as everything else, so
+they ride the existing `./data` volume in Docker.
 
 ## Rotation semantics (locked)
 
@@ -219,6 +233,14 @@ always Mondays.
   anything anytime and edit/delete **their own** rating; they submit only
   during their assigned week (when they head the queue). Deactivated
   members keep history but cannot log in.
+- Self-service account (issue #50): the member can edit their own display
+  name (1–64, same Zod limits as signup), change their password (current
+  password verified, then **all** their sessions dropped via
+  `sessionStore.dropUser` — like the admin reset, the member must log back
+  in), and upload/remove a profile picture (`POST /api/profile/avatar`, ≤
+  2 MiB, PNG/JPEG/WebP verified by magic bytes — never the client's
+  declared type). Admins cannot edit other members' display names or
+  avatars; `/profile` is strictly self-only and member-private.
 
 ## External IDs, embeds, covers (locked)
 
