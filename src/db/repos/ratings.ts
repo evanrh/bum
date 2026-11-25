@@ -105,7 +105,7 @@ export type MyRatingRow = Rating & {
   albumYear: number | null;
 };
 
-/** One member's ratings joined with their albums — the /my-ratings read model. */
+/** One member's ratings joined with their albums — the /profile read model (issue #50). */
 export async function listRatingsByUser(
   db: Db,
   userId: number,

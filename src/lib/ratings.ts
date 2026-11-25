@@ -71,9 +71,10 @@ export async function deleteRating(
 }
 
 /**
- * /my-ratings URL state (issue #37): sort by first-rated date or own score,
- * ascending or descending. Missing params fall back to newest-first; any
- * unknown value is a 400, matching how /albums treats its query.
+ * /profile URL state (issue #37, ex-/my-ratings): sort by first-rated date
+ * or own score, ascending or descending. Missing params fall back to
+ * newest-first; any unknown value is a 400, matching how /albums treats its
+ * query.
  */
 export const myRatingsQuerySchema = z.object({
   sort: z.enum(['created', 'score']).optional(),

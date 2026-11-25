@@ -14,8 +14,8 @@ import { scoreStars } from '../lib/scale.ts';
 const user = Astro.locals.user;
 if (user === null) return Astro.redirect('/login');
 
-// Issue #50: the member's profile page — the /my-ratings read model
-// (ratingsRepo.listRatingsByUser + parseMyRatingsQuery, issue #37) moved here.
+// Issue #50: the member's profile page — the personal ratings review (issue
+// #37's read model, ex-/my-ratings).
 const db = getDb();
 const sort: RatingHistorySort = parseMyRatingsQuery(Object.fromEntries(Astro.url.searchParams));
 const rows = await ratingsRepo.listRatingsByUser(db, user.id, sort);
