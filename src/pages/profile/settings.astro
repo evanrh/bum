@@ -1,0 +1,29 @@
+---
+import Base from '../../layouts/Base.astro';
+import { ProfileSettings } from '../../components/islands/ProfileSettings.tsx';
+import { getDb } from '../../db/index.ts';
+import * as avatarsRepo from '../../db/repos/avatars.ts';
+
+// Member-private like /profile itself: no session → the login page.
+const user = Astro.locals.user;
+if (user === null) return Astro.redirect('/login');
+
+const db = getDb();
+const avatarMeta = user.isActive ? await avatarsRepo.getAvatarMeta(db, user.id) : undefined;
+---
+
+<Base title="Your profile settings — Bum">
+  <section aria-label="profile settings">
+    <h1 class="mb-4 text-lg font-semibold text-zinc-100">profile settings</h1>
+    <ProfileSettings
+      client:load
+      username={user.username}
+      initialDisplayName={user.displayName}
+      avatarVersion={avatarMeta?.updatedAt ?? null}
+      userId={user.id}
+    />
+    <p class="mt-6 text-sm">
+      <a class="text-amber-400 underline" href="/profile">← back to your profile</a>
+    </p>
+  </section>
+</Base>

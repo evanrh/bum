@@ -35,10 +35,10 @@ describe('migrations', () => {
     expect(appliedMigrationCount(db)).toBe(afterFirst);
   });
 
-  it('record one journal entry per migration file (base, rotation queue, original admin, backlog)', () => {
+  it('record one journal entry per migration file (base, rotation queue, original admin, backlog, avatars)', () => {
     const db = createDatabase(':memory:');
     applyMigrations(db);
-    expect(appliedMigrationCount(db)).toBe(4);
+    expect(appliedMigrationCount(db)).toBe(5);
     expect(migrationsFolder()).toMatch(/drizzle\/?$/);
   });
 

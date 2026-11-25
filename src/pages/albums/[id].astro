@@ -1,6 +1,7 @@
 ---
 import Base from '../../layouts/Base.astro';
 import AlbumEmbed from '../../components/AlbumEmbed.astro';
+import Avatar from '../../components/Avatar.astro';
 import StarDisplay from '../../components/StarDisplay.astro';
 import { RatingWidget } from '../../components/islands/RatingWidget.tsx';
 import { Show } from '../../components/react/Show.tsx';
@@ -82,7 +83,15 @@ const loggedOut = user === null;
               others.map((row) => (
                 <li class="flex flex-col gap-1 px-4 py-3">
                   <div class="flex items-center justify-between">
-                    <span class="text-sm font-medium text-zinc-200">{row.displayName}</span>
+                    <span class="flex items-center gap-2">
+                      <Avatar
+                        userId={row.userId}
+                        contentType={row.avatarContentType}
+                        name={row.displayName}
+                        size="sm"
+                      />
+                      <span class="text-sm font-medium text-zinc-200">{row.displayName}</span>
+                    </span>
                     <StarDisplay score10={row.score} size="text-sm" />
                   </div>
                   <div class="flex items-center justify-between">

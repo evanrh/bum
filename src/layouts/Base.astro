@@ -1,6 +1,8 @@
 ---
 import '../styles/global.css';
+import Avatar from '../components/Avatar.astro';
 import { getDb } from '../db/index.ts';
+import * as avatarsRepo from '../db/repos/avatars.ts';
 import { siteOrigin } from '../lib/config.ts';
 import { submitEligibility, turnSummary } from '../lib/dashboard.ts';
 import { FALLBACK_BLURB, joinUrl, ogImage } from '../lib/opengraph.ts';
@@ -41,6 +43,8 @@ const youPick =
   user !== null && user.isActive && summary.pickerId === user.id && !summary.submitted;
 const submitLink = user !== null && user.isActive ? await submitEligibility(db, user.id) : undefined;
 const canSubmit = user !== null && user.isActive && submitLink.eligible;
+// Presence/version check only — no image bytes ride along with every page.
+const avatarMeta = user && user.isActive ? await avatarsRepo.getAvatarMeta(db, user.id) : undefined;
 ---
 
 <!doctype html>
@@ -83,7 +87,10 @@ const canSubmit = user !== null && user.isActive && submitLink.eligible;
           {
             user ? (
               <div class="flex items-center gap-3 text-sm">
-                <span class="text-zinc-400">{user.displayName}</span>
+                <a href="/profile" class="flex items-center gap-2" aria-label="your profile">
+                  <Avatar userId={user.id} contentType={avatarMeta?.contentType ?? null} name={user.displayName} size="sm" />
+                  <span class="text-zinc-400 hover:text-zinc-200">{user.displayName}</span>
+                </a>
                 <form method="post" action="/api/logout">
                   <button class="text-zinc-500 underline hover:text-zinc-300" type="submit">log out</button>
                 </form>
@@ -99,7 +106,7 @@ const canSubmit = user !== null && user.isActive && submitLink.eligible;
         <nav class="mt-4 flex gap-4 text-sm" aria-label="main">
           <a href="/" class="text-zinc-300 hover:text-white">dashboard</a>
           <a href="/albums" class="text-zinc-300 hover:text-white">albums</a>
-          {user !== null ? (<a href="/my-ratings" class="text-zinc-300 hover:text-white">my ratings</a>) : null}
+          {user !== null ? (<a href="/profile" class="text-zinc-300 hover:text-white">profile</a>) : null}
           {user !== null ? (<a href="/backlog" class="text-zinc-300 hover:text-white">backlog</a>) : null}
           {
             canSubmit && (

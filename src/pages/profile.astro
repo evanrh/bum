@@ -1,0 +1,117 @@
+---
+import Base from '../layouts/Base.astro';
+import StarDisplay from '../components/StarDisplay.astro';
+import { Show } from '../components/react/Show.tsx';
+import { getDb } from '../db/index.ts';
+import * as ratingsRepo from '../db/repos/ratings.ts';
+import * as usersRepo from '../db/repos/users.ts';
+import type { RatingHistorySort } from '../db/repos/ratings.ts';
+import { relativeTime } from '../lib/dashboard.ts';
+import { parseMyRatingsQuery } from '../lib/ratings.ts';
+import { scoreStars } from '../lib/scale.ts';
+
+// Member-private like /backlog: no session → the login page.
+const user = Astro.locals.user;
+if (user === null) return Astro.redirect('/login');
+
+// Issue #50: the member's profile page — the /my-ratings read model
+// (ratingsRepo.listRatingsByUser + parseMyRatingsQuery, issue #37) moved here.
+const db = getDb();
+const sort: RatingHistorySort = parseMyRatingsQuery(Object.fromEntries(Astro.url.searchParams));
+const rows = await ratingsRepo.listRatingsByUser(db, user.id, sort);
+const me = await usersRepo.getUserById(db, user.id);
+const now = Date.now();
+
+type SortMode = {
+  label: string;
+  field: RatingHistorySort['field'];
+  dir: RatingHistorySort['direction'];
+};
+const modes: SortMode[] = [
+  { label: 'newest first', field: 'created', dir: 'desc' },
+  { label: 'oldest first', field: 'created', dir: 'asc' },
+  { label: 'highest first', field: 'score', dir: 'desc' },
+  { label: 'lowest first', field: 'score', dir: 'asc' },
+];
+
+const isDefault = (mode: SortMode): boolean =>
+  mode.field === 'created' && mode.dir === 'desc';
+const modeHref = (mode: SortMode): string =>
+  isDefault(mode) ? '/profile' : `/profile?sort=${mode.field}&dir=${mode.dir}`;
+const isActiveMode = (mode: SortMode): boolean =>
+  mode.field === sort.field && mode.dir === sort.direction;
+---
+
+<Base title={me ? `${me.displayName}'s profile — Bum` : 'Your profile — Bum'}>
+  <section aria-label="your profile">
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <h1 class="text-lg font-semibold text-zinc-100">Your ratings ({rows.length})</h1>
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="flex flex-wrap items-center gap-1" role="group" aria-label="sort your ratings">
+          {
+            modes.map((mode) => (
+              <a
+                href={modeHref(mode)}
+                aria-current={isActiveMode(mode) ? 'true' : undefined}
+                class:list={[
+                  'rounded px-3 py-1 text-sm',
+                  isActiveMode(mode)
+                    ? 'bg-zinc-100 font-medium text-zinc-900'
+                    : 'text-zinc-400 hover:text-zinc-200',
+                ]}
+              >
+                {mode.label}
+              </a>
+            ))
+          }
+        </div>
+        <a
+          href="/profile/settings"
+          class="rounded border border-zinc-700 px-3 py-1 text-sm text-zinc-300 hover:border-zinc-500 hover:text-white"
+        >
+          settings
+        </a>
+      </div>
+    </div>
+    {
+      rows.length === 0 ? (
+        <p class="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-6 text-sm text-zinc-500">
+          no ratings yet — open an album and give it a score.
+        </p>
+      ) : (
+        <ul class="divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900">
+          {
+            rows.map((row) => (
+              <li class="flex flex-col gap-1 px-4 py-3">
+                <div class="flex items-center justify-between gap-3">
+                  <a
+                    class="text-sm font-medium text-zinc-200 hover:underline"
+                    href={`/albums/${row.albumId}`}
+                  >
+                    {row.albumTitle}
+                  </a>
+                  <span class="flex shrink-0 items-center gap-2">
+                    <StarDisplay score10={row.score} size="text-sm" />
+                    <span class="text-xs text-zinc-500">{scoreStars(row.score)}</span>
+                  </span>
+                </div>
+                <div class="flex items-center justify-between gap-3">
+                  <p class="text-sm text-zinc-400">
+                    {row.albumArtist}
+                    {row.albumYear !== null ? ` (${row.albumYear})` : ''}
+                  </p>
+                  <span class="shrink-0 text-xs text-zinc-600">
+                    rated {relativeTime(row.createdAt, now)}
+                  </span>
+                </div>
+                <Show when={row.comment}>
+                  <p class="rounded bg-zinc-950 px-3 py-2 text-sm italic text-zinc-300">“{row.comment}”</p>
+                </Show>
+              </li>
+            ))
+          }
+        </ul>
+      )
+    }
+  </section>
+</Base>

@@ -1,0 +1,37 @@
+---
+/**
+ * Round avatar chip with the AlbumCard fallback treatment: a real `/api/…`
+ * image when the member has a picture, otherwise a gradient circle with the
+ * member's initial (issue #50). `contentType` non-null ⇒ a row exists.
+ */
+interface Props {
+  userId: number;
+  contentType: string | null;
+  name: string;
+  /** Tailwind size classes for the square chip. */
+  size?: 'sm' | 'md';
+}
+
+const { userId, contentType, name, size = 'sm' } = Astro.props;
+const initial = name.charAt(0).toUpperCase();
+const sizes = { sm: 'h-6 w-6 text-[10px]', md: 'h-12 w-12 text-base' };
+const sizeClass = sizes[size];
+---
+
+{
+  contentType ? (
+    <img
+      src={`/api/avatars/${userId}`}
+      alt={`${name}'s picture`}
+      loading="lazy"
+      class={`${sizeClass} shrink-0 rounded-full object-cover`}
+    />
+  ) : (
+    <span
+      aria-hidden="true"
+      class={`${sizeClass} flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-zinc-700 via-zinc-800 to-zinc-900 font-semibold text-zinc-400`}
+    >
+      {initial}
+    </span>
+  )
+}

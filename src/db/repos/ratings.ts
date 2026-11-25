@@ -1,6 +1,6 @@
 import { and, asc, desc, eq } from 'drizzle-orm';
 
-import { albums, ratings, users, type Rating } from '../schema.ts';
+import { albums, avatars, ratings, users, type Rating } from '../schema.ts';
 import type { Db } from '../index.ts';
 
 export type UpsertRatingInput = {
@@ -10,7 +10,12 @@ export type UpsertRatingInput = {
   comment?: string | null;
 };
 
-export type RatingWithUser = Rating & { username: string; displayName: string };
+export type RatingWithUser = Rating & {
+  username: string;
+  displayName: string;
+  /** Content type when that member has a profile picture (issue #50). */
+  avatarContentType: string | null;
+};
 
 /**
  * Insert-or-update one member's rating for one album (UNIQUE album_id +
@@ -73,9 +78,12 @@ export async function listRatingsForAlbum(db: Db, albumId: string): Promise<Rati
       updatedAt: ratings.updatedAt,
       username: users.username,
       displayName: users.displayName,
+      // No image bytes — presence only, for the Avatar fallback (issue #50).
+      avatarContentType: avatars.contentType,
     })
     .from(ratings)
     .innerJoin(users, eq(ratings.userId, users.id))
+    .leftJoin(avatars, eq(avatars.userId, ratings.userId))
     .where(eq(ratings.albumId, albumId))
     .orderBy(desc(ratings.createdAt));
 }
