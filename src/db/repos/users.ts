@@ -115,3 +115,13 @@ export async function setUserPassword(db: Db, id: number, passwordHash: string):
     .returning();
   return user;
 }
+
+/** Self-service rename (issue #50) — admins cannot do this, only the member. */
+export async function setDisplayName(db: Db, id: number, displayName: string): Promise<User> {
+  const [user] = await db
+    .update(users)
+    .set({ displayName })
+    .where(eq(users.id, id))
+    .returning();
+  return user;
+}

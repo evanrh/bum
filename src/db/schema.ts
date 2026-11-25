@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  blob,
   check,
   index,
   integer,
@@ -182,6 +183,23 @@ export const auditLog = sqliteTable(
   (t) => [index('audit_log_created_at_idx').on(t.createdAt)],
 );
 
+/**
+ * Profile pictures (issue #50) — one optional row per member, in-row BLOB so
+ * the avatar lives inside the same durable SQLite file as everything else.
+ * Kept out of `users` so session resolution and user listings never drag
+ * image bytes around; the UI treats a missing row as "use the placeholder".
+ */
+export const avatars = sqliteTable('avatars', {
+  userId: integer('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  /** Server-sniffed type — image/png | image/jpeg | image/webp only. */
+  contentType: text('content_type').notNull(),
+  /** Raw uploaded bytes (≤ 2 MiB), stored as-is — no processing. */
+  data: blob('data', { mode: 'buffer' }).notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
 export type Settings = InferSelectModel<typeof settings>;
 export type SettingsInsert = InferInsertModel<typeof settings>;
 export type User = InferSelectModel<typeof users>;
@@ -194,3 +212,5 @@ export type Rating = InferSelectModel<typeof ratings>;
 export type RatingInsert = InferInsertModel<typeof ratings>;
 export type AuditLog = InferSelectModel<typeof auditLog>;
 export type AuditLogInsert = InferInsertModel<typeof auditLog>;
+export type Avatar = InferSelectModel<typeof avatars>;
+export type AvatarInsert = InferInsertModel<typeof avatars>;
