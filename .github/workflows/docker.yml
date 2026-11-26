@@ -47,6 +47,10 @@ jobs:
         name: next version → bump commit → annotated tag → push
         run: |
           set -euo pipefail
+          # The runner has no git identity — the bump commit AND the annotated
+          # tag both need one (the v1.3.0 first run died at `git tag -a`).
+          git config user.name 'bum-release'
+          git config user.email 'bum-release@users.noreply.github.com'
           VERSION="$(node scripts/next-version.mjs)"
           if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
             # Already-released version (full rerun after smoke): reuse the
