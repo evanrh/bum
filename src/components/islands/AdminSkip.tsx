@@ -88,7 +88,7 @@ export function AdminSkip({ week, pickerName, nextPickerName, hasAlbum, queue }:
           type="button"
           onClick={() => void skip()}
           disabled={pending}
-          className="rounded border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:border-zinc-500 disabled:opacity-50"
+          className="cursor-pointer rounded border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pending ? 'working…' : 'skip current picker'}
         </button>
@@ -109,7 +109,7 @@ export function AdminSkip({ week, pickerName, nextPickerName, hasAlbum, queue }:
           type="button"
           onClick={() => void select()}
           disabled={pending || !selected}
-          className="rounded border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:border-zinc-500 disabled:opacity-50"
+          className="cursor-pointer rounded border border-zinc-700 px-3 py-1.5 text-sm text-zinc-200 hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           make picker
         </button>

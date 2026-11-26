@@ -120,7 +120,7 @@ describe('user actions', () => {
     expect((await lastAdmin.json()).error).toBe('you cannot demote the last admin');
   });
 
-  describe('original admin protection (issue #15)', () => {
+  describe('original admin protection (issues #15, #62)', () => {
     /** Fixture users are created without the flag; flip it like the migration would. */
     const flagOriginal = (id: number): void => {
       db.update(users).set({ isOriginalAdmin: true }).where(eq(users.id, id)).run();
@@ -150,6 +150,25 @@ describe('user actions', () => {
       expect(lastAdmin.status).toBe(409);
       expect((await lastAdmin.json()).error).toBe('the original admin cannot be demoted');
       expect((await usersRepo.getUserById(db, members.admin.id))?.isAdmin).toBe(true);
+    });
+
+    it('blocks deactivating the original admin — by another admin or by themselves (issue #62)', async () => {
+      await flagOriginal(members.admin.id);
+      await usersRepo.setUserAdmin(db, members.carol.id, true);
+
+      const byAnother = await userAction(db, await fullUser(members.carol), members.admin.id, { action: 'deactivate' });
+      expect(byAnother.status).toBe(409);
+      expect((await byAnother.json()).error).toBe('the original admin cannot be deactivated');
+      expect((await usersRepo.getUserById(db, members.admin.id))?.isActive).toBe(true);
+
+      const bySelf = await userAction(db, admin, members.admin.id, { action: 'deactivate' });
+      expect(bySelf.status).toBe(409);
+      expect((await bySelf.json()).error).toBe('the original admin cannot be deactivated');
+
+      // Non-original members deactivate exactly as before (queue invariant, sessions).
+      const bobWasActive = (await userAction(db, admin, members.bob.id, { action: 'deactivate' })).status;
+      expect(bobWasActive).toBe(200);
+      expect((await usersRepo.getUserById(db, members.bob.id))?.isActive).toBe(false);
     });
 
     it('the flag rides along in roster and action payloads', async () => {

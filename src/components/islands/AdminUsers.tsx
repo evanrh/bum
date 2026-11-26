@@ -47,7 +47,7 @@ function IconButton({ icon, tip, label, disabled, onClick }: IconButtonProps): R
         onClick={onClick}
         title={tip}
         aria-label={label}
-        className="flex h-7 w-7 items-center justify-center rounded border border-zinc-700 text-xs text-zinc-300 hover:border-zinc-500 disabled:opacity-50"
+        className="flex h-7 w-7 cursor-pointer items-center justify-center rounded border border-zinc-700 text-xs text-zinc-300 hover:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <FontAwesomeIcon icon={icon} aria-hidden="true" />
       </button>
@@ -169,7 +169,7 @@ export function AdminUsers({ users: initial }: { users: AdminUserRow[] }): React
                       icon={faUserSlash}
                       tip="Deactivate"
                       label={`deactivate ${user.username}`}
-                      disabled={busyId !== null}
+                      disabled={busyId !== null || user.isOriginalAdmin}
                       onClick={() => void act(user, 'deactivate')}
                     />
                   </Show>

@@ -36,7 +36,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('<AdminUsers> (issues #53, #58 — icon actions with Bootstrap-style tooltips)', () => {
+describe('<AdminUsers> (issues #53, #58, #62 — icon actions with Bootstrap-style tooltips + cursor states)', () => {
   it('drops the queue column; every action is an icon button with a bare-action tip + row-specific aria name', () => {
     render(<AdminUsers users={[row(), row({ id: 2, username: 'carol', isAdmin: true })]} />);
     expect(screen.queryByText('queue')).toBeNull();
@@ -88,6 +88,29 @@ describe('<AdminUsers> (issues #53, #58 — icon actions with Bootstrap-style to
     const lock = screen.getByTitle('Original admin');
     expect(lock.getAttribute('title')).toBe('Original admin');
     expect(lock.getAttribute('aria-label')).toBe('the first member ever — permanently admin');
+  });
+
+  it('actionable buttons point; the original admin\'s deactivate is disabled with a not-allowed cursor (issue #62)', () => {
+    render(<AdminUsers users={[row(), row({ id: 2, username: 'carol', isAdmin: true, isOriginalAdmin: true })]} />);
+    for (const name of [
+      'promote bob',
+      'deactivate bob',
+      "reset bob's password",
+      'deactivate carol',
+      "reset carol's password",
+    ] as const) {
+      const button = screen.getByRole('button', { name }) as HTMLButtonElement;
+      expect(button.className).toContain('cursor-pointer');
+      if (name === 'deactivate carol') {
+        // The permanent admin cannot be deactivated — the button never wakes up.
+        expect(button.disabled).toBe(true);
+        expect(button.className).toContain('disabled:cursor-not-allowed');
+      } else {
+        expect(button.disabled).toBe(false);
+      }
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'deactivate carol' }));
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('icon buttons POST the unchanged payloads to /api/admin/users/{id}', async () => {

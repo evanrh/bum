@@ -133,6 +133,9 @@ export async function userAction(
     }
     if (input.action === 'deactivate') {
       if (!target.isActive) throw new ApiError(409, 'user is already deactivated');
+      // Issue #15: demoting the permanent original admin is forbidden — losing
+      // login or the rotation would be no different (#62).
+      if (target.isOriginalAdmin) throw new ApiError(409, 'the original admin cannot be deactivated');
       let updated: User | undefined;
       db.transaction((tx) => {
         const rows = tx
