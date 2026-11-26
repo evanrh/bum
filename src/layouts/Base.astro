@@ -1,6 +1,7 @@
 ---
 import '../styles/global.css';
 import Avatar from '../components/Avatar.astro';
+import NavDrawer from '../components/islands/NavDrawer.tsx';
 import { getDb } from '../db/index.ts';
 import * as avatarsRepo from '../db/repos/avatars.ts';
 import { siteOrigin } from '../lib/config.ts';
@@ -45,6 +46,10 @@ const submitLink = user !== null && user.isActive ? await submitEligibility(db, 
 const canSubmit = user !== null && user.isActive && submitLink.eligible;
 // Presence/version check only — no image bytes ride along with every page.
 const avatarMeta = user && user.isActive ? await avatarsRepo.getAvatarMeta(db, user.id) : undefined;
+// Safe fields only for the client island — the session row carries the
+// password hash and never crosses to the browser (issue #52).
+const navUser =
+  user === null ? null : { id: user.id, displayName: user.displayName, isAdmin: user.isAdmin };
 ---
 
 <!doctype html>
@@ -86,7 +91,7 @@ const avatarMeta = user && user.isActive ? await avatarsRepo.getAvatarMeta(db, u
           </a>
           {
             user ? (
-              <div class="flex items-center gap-3 text-sm">
+              <div class="hidden items-center gap-3 text-sm md:flex">
                 <a href="/profile" class="flex items-center gap-2" aria-label="your profile">
                   <Avatar userId={user.id} contentType={avatarMeta?.contentType ?? null} name={user.displayName} size="sm" />
                   <span class="text-zinc-400 hover:text-zinc-200">{user.displayName}</span>
@@ -96,14 +101,22 @@ const avatarMeta = user && user.isActive ? await avatarsRepo.getAvatarMeta(db, u
                 </form>
               </div>
             ) : (
-              <div class="flex items-center gap-3 text-sm">
+              <div class="hidden items-center gap-3 text-sm md:flex">
                 <a href="/login" class="text-zinc-400 hover:text-zinc-200">log in</a>
                 <a href="/signup" class="text-zinc-400 hover:text-zinc-200">sign up</a>
               </div>
             )
           }
+          <div class="md:hidden">
+            <NavDrawer
+              client:load
+              user={navUser}
+              avatarContentType={avatarMeta?.contentType ?? null}
+              canSubmit={canSubmit}
+            />
+          </div>
         </div>
-        <nav class="mt-4 flex gap-4 text-sm" aria-label="main">
+        <nav class="mt-4 hidden gap-4 text-sm md:flex" aria-label="main">
           <a href="/" class="text-zinc-300 hover:text-white">dashboard</a>
           <a href="/albums" class="text-zinc-300 hover:text-white">albums</a>
           {user !== null ? (<a href="/profile" class="text-zinc-300 hover:text-white">profile</a>) : null}

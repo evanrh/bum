@@ -1,1 +1,21 @@
 @import "tailwindcss";
+
+/* Left drawer slide-in (issue #52) — Tailwind's animate-[…] needs real
+   @keyframes in CSS; motion-safe: drops them under reduced-motion. */
+@keyframes nav-drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes nav-drawer-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
