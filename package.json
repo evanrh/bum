@@ -1,6 +1,6 @@
 {
   "name": "bum",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Album review club for a group of friends",
   "type": "module",
   "private": true,
