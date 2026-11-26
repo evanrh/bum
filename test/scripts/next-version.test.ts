@@ -5,19 +5,9 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { nextVersion, parseVersion } from '../../scripts/next-version.mjs';
+import { nextVersion } from '../../scripts/next-version.mjs';
 
 const SCRIPT_PATH = path.resolve(import.meta.dirname, '../../scripts/next-version.mjs');
-
-describe('parseVersion', () => {
-  it('accepts tagged and bare versions, rejects everything else', () => {
-    expect(parseVersion('v1.2.3')).toEqual({ major: 1, minor: 2, patch: 3 });
-    expect(parseVersion('1.2.3')).toEqual({ major: 1, minor: 2, patch: 3 });
-    expect(parseVersion('v1.2')).toBeNull();
-    expect(parseVersion('main')).toBeNull();
-    expect(parseVersion(null)).toBeNull();
-  });
-});
 
 describe('nextVersion — the commit-scan rule (issue #59)', () => {
   it('a feat commit ⇒ minor, resetting the patch', () => {
@@ -47,6 +37,16 @@ describe('nextVersion — the commit-scan rule (issue #59)', () => {
     expect(nextVersion(null, ['feat(#1): first feature'])).toBe('1.1.0');
     expect(nextVersion(null, ['feat', 'chore: setup'])).toBe('1.1.0');
     expect(nextVersion(null, ['chore: setup'])).toBe('1.0.1');
+  });
+
+  it('an invalid last tag (wrong shape) falls back to the 1.0.0 baseline too', () => {
+    expect(nextVersion('main', ['feat(#1): thing'])).toBe('1.1.0');
+    expect(nextVersion('v1.2', ['fix(#1): thing'])).toBe('1.0.1');
+  });
+
+  it('semver tolerance: prerelease tags parse, and inc releases them', () => {
+    expect(nextVersion('v1.2.3-rc.1', ['feat(#7): thing'])).toBe('1.3.0');
+    expect(nextVersion('v1.2.3-rc.1', ['fix(#8): thing'])).toBe('1.2.3'); // the rc ships
   });
 
   it('feat must stand alone: lookalike subjects stay a patch', () => {

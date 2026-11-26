@@ -41,6 +41,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # tags + full history feed the commit scan
+      - name: install dev dependencies (semver powers scripts/next-version.mjs)
+        run: npm ci
       - id: bump
         name: next version → bump commit → annotated tag → push
         run: |
