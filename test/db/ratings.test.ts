@@ -114,7 +114,8 @@ describe('listRatingsByUser — personal history', () => {
     await ratingsRepo.upsertRating(db, { albumId: jazzId, userId: fixture.carol.id, score: 2 }, now + 15);
   });
 
-  // The one order the SQL still ships (issue #54): the island re-sorts client-side.
+  // Issue #56: SQL ships every order; the island re-fetches on toggle and
+  // renders the response as-is.
   it('defaults to first-rated, newest first, with the album joined in', async () => {
     const rows = await ratingsRepo.listRatingsByUser(db, fixture.bob.id);
     expect(rows.map((r) => r.albumTitle)).toEqual([
@@ -146,5 +147,39 @@ describe('listRatingsByUser — personal history', () => {
     const mine = await ratingsRepo.listRatingsByUser(db, fixture.carol.id);
     expect(mine).toHaveLength(1);
     expect(mine[0]).toMatchObject({ albumId: jazzId, score: 2, userId: fixture.carol.id });
+  });
+
+  it('created asc is the exact reverse of the recency default', async () => {
+    const rows = await ratingsRepo.listRatingsByUser(db, fixture.bob.id, {
+      field: 'created',
+      direction: 'asc',
+    });
+    expect(rows.map((r) => r.albumId)).toEqual([jazzId, albumB, albumC]);
+  });
+
+  it('score desc breaks ties by ratings.id desc', async () => {
+    const rows = await ratingsRepo.listRatingsByUser(db, fixture.bob.id, {
+      field: 'score',
+      direction: 'desc',
+    });
+    // 9 first; the two 5s break by id DESC — albumC's rating was inserted
+    // later (now + 30), so it outranks the jazz rating regardless of recency.
+    expect(rows.map((r) => r.albumId)).toEqual([albumB, albumC, jazzId]);
+  });
+
+  it('score asc keeps the same id-DESC tie-break — direction flips the primary key only', async () => {
+    const rows = await ratingsRepo.listRatingsByUser(db, fixture.bob.id, {
+      field: 'score',
+      direction: 'asc',
+    });
+    expect(rows.map((r) => r.albumId)).toEqual([albumC, jazzId, albumB]);
+  });
+
+  it('sort params respect member isolation too', async () => {
+    const rows = await ratingsRepo.listRatingsByUser(db, fixture.carol.id, {
+      field: 'score',
+      direction: 'desc',
+    });
+    expect(rows.map((r) => r.albumId)).toEqual([jazzId]);
   });
 });

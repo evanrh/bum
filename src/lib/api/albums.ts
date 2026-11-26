@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { Db } from '../../db/index.ts';
 import * as albumsRepo from '../../db/repos/albums.ts';
 import * as settingsRepo from '../../db/repos/settings.ts';
+import { listRatingsByUser } from '../../db/repos/ratings.ts';
 import type { User } from '../../db/schema.ts';
 import { submitAlbum } from '../albums.ts';
 import { ApiError, jsonError } from '../errors.ts';
@@ -78,6 +79,33 @@ export async function removeRating(request: Request, db: Db, user: User | null):
     if (!albumId) throw new ApiError(400, 'album_id is required');
     await deleteRating(user, db, albumId);
     return new Response(null, { status: 204 });
+  } catch (error) {
+    return jsonError(error);
+  }
+}
+
+const myRatingsQuerySchema = z.object({
+  sort: z.enum(['created', 'score']).optional(),
+  dir: z.enum(['asc', 'desc']).optional(),
+});
+
+/**
+ * GET /api/ratings — the signed-in member's ratings list, server-sorted
+ * (issue #56): the profile island re-fetches on every sort toggle and renders
+ * the response as-is, so ordering lives at the SQL boundary.
+ */
+export async function listMyRatings(request: Request, db: Db, user: User | null): Promise<Response> {
+  try {
+    if (!user) throw new ApiError(401, 'authentication required');
+    const parsed = or400(myRatingsQuerySchema, Object.fromEntries(new URL(request.url).searchParams));
+    const rows = await listRatingsByUser(db, user.id, {
+      field: parsed.sort ?? 'created',
+      direction: parsed.dir ?? 'desc',
+    });
+    return new Response(JSON.stringify({ rows }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
   } catch (error) {
     return jsonError(error);
   }

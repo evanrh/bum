@@ -4,7 +4,7 @@ import * as albumsRepo from '../../src/db/repos/albums.ts';
 import * as ratingsRepo from '../../src/db/repos/ratings.ts';
 import * as settingsRepo from '../../src/db/repos/settings.ts';
 import type { Db } from '../../src/db/index.ts';
-import { createAlbum, listAlbums, putRating, removeRating } from '../../src/lib/api/albums.ts';
+import { createAlbum, listAlbums, listMyRatings, putRating, removeRating } from '../../src/lib/api/albums.ts';
 import { sessionCookie } from '../../src/lib/auth.ts';
 import { sessionStore } from '../../src/lib/sessions.ts';
 import { weekId } from '../../src/lib/rotation.ts';
@@ -211,5 +211,65 @@ describe('PUT/DELETE /api/ratings', () => {
   it('DELETE without album_id → 400', async () => {
     const nope = await removeRating(new Request('http://localhost:4321/api/ratings'), db, asLocals(members.bob));
     expect(nope.status).toBe(400);
+  });
+});
+
+describe('GET /api/ratings — server-sorted member history (issue #56)', () => {
+  let albumJan05 = '';
+  let albumJan12 = '';
+  let albumJan19 = '';
+
+  beforeEach(async () => {
+    // Three albums bob rated at distinct moments; carol rates one of them.
+    albumJan05 = await albumsRepo.insertAlbum(db, {
+      title: 'album for week 2026-01-05', artist: 'some artist', submittedBy: members.dave.id, submittedAt: 1000, weekStart: '2026-01-05',
+    }).then((r) => r.ok ? r.album.id : '');
+    albumJan12 = await albumsRepo.insertAlbum(db, {
+      title: 'album for week 2026-01-12', artist: 'some artist', submittedBy: members.dave.id, submittedAt: 1001, weekStart: '2026-01-12',
+    }).then((r) => r.ok ? r.album.id : '');
+    albumJan19 = await albumsRepo.insertAlbum(db, {
+      title: 'album for week 2026-01-19', artist: 'some artist', submittedBy: members.dave.id, submittedAt: 1002, weekStart: '2026-01-19',
+    }).then((r) => r.ok ? r.album.id : '');
+    await ratingsRepo.upsertRating(db, { albumId: albumJan05, userId: members.bob.id, score: 5 }, now + 10);
+    await ratingsRepo.upsertRating(db, { albumId: albumJan12, userId: members.bob.id, score: 9 }, now + 20);
+    await ratingsRepo.upsertRating(db, { albumId: albumJan19, userId: members.bob.id, score: 5 }, now + 30);
+    await ratingsRepo.upsertRating(db, { albumId: albumJan05, userId: members.carol.id, score: 2 }, now + 15);
+  });
+
+  it('anonymous → 401', async () => {
+    const response = await listMyRatings(cookieRequest('GET', '/api/ratings', null), db, null);
+    expect(response.status).toBe(401);
+  });
+
+  it('unknown sort/dir params → 400', async () => {
+    const badSort = await listMyRatings(cookieRequest('GET', '/api/ratings?sort=squish', bobCookie), db, asLocals(members.bob));
+    expect(badSort.status).toBe(400);
+    const badDir = await listMyRatings(cookieRequest('GET', '/api/ratings?dir=down', bobCookie), db, asLocals(members.bob));
+    expect(badDir.status).toBe(400);
+  });
+
+  it('default params return the member\'s rows, first-rated newest first, with the album joined', async () => {
+    const response = await listMyRatings(cookieRequest('GET', '/api/ratings', bobCookie), db, asLocals(members.bob));
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { rows: Array<{ id: number; albumId: string; albumTitle: string; score: number }> };
+    expect(body.rows.map((r) => r.albumTitle)).toEqual([
+      'album for week 2026-01-19',
+      'album for week 2026-01-12',
+      'album for week 2026-01-05',
+    ]);
+    expect(body.rows[0]).toMatchObject({ albumId: albumJan19, score: 5, albumArtist: 'some artist' });
+  });
+
+  it('sort/dir params drive the order; the history is member-private', async () => {
+    const scoreDesc = await listMyRatings(cookieRequest('GET', '/api/ratings?sort=score&dir=desc', bobCookie), db, asLocals(members.bob));
+    const descRows = (await scoreDesc.json()) as { rows: Array<{ albumId: string }> };
+    // The two 5s break by ratings.id DESC — the 01-19 rating was inserted later.
+    expect(descRows.rows.map((r) => r.albumId)).toEqual([albumJan12, albumJan19, albumJan05]);
+
+    const carolCookie = sessionCookie(sessionStore.create(members.carol.id, Date.now()).token, false);
+    const carolView = await listMyRatings(cookieRequest('GET', '/api/ratings?sort=score&dir=desc', carolCookie), db, asLocals(members.carol, { username: 'carol', displayName: 'carol' }));
+    const carolRows = (await carolView.json()) as { rows: Array<{ userId: number; score: number }> };
+    expect(carolRows.rows).toHaveLength(1);
+    expect(carolRows.rows[0]).toMatchObject({ userId: members.carol.id, score: 2 });
   });
 });

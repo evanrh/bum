@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 
 import type { MyRatingRow } from '../../db/repos/ratings.ts';
 import { relativeTime } from '../../lib/dashboard.ts';
@@ -23,17 +23,6 @@ const FIELDS: Array<{ id: SortField; label: string }> = [
   { id: 'created', label: 'date created' },
   { id: 'score', label: 'rating' },
 ];
-
-/**
- * Client-side twin of the SQL ordering this page used to ship (issue #37):
- * primary field/direction, ties always break by ratings.id DESC — no matter
- * the primary direction.
- */
-const compareRows = (a: MyRatingRow, b: MyRatingRow, sort: SortState): number => {
-  const primary = sort.field === 'created' ? a.createdAt - b.createdAt : a.score - b.score;
-  const directed = sort.direction === 'asc' ? primary : -primary;
-  return directed !== 0 ? directed : b.id - a.id;
-};
 
 function Chevron({ direction }: { direction: SortDirection }): ReactNode {
   return (
@@ -106,24 +95,50 @@ function RatingRow({ row, now }: { row: MyRatingRow; now: number }): ReactNode {
 }
 
 /**
- * /profile ratings list (issue #54): sort lives entirely in client state —
- * two field toggles, fresh loads start at date created descending, active
- * flips direction, inactive activates at its default. Nothing is persisted
- * and the URL is never read or written, so legacy ?sort=… query strings are
- * simply ignored. Rows arrive fully rendered from the .astro shell.
+ * /profile ratings list (issues #54/#56): sort state lives entirely in client
+ * state — the URL is never read or written and fresh loads start at date
+ * created descending — but every toggle re-fetches from `GET /api/ratings`
+ * and renders the server-sorted response as-is, so ordering lives at the SQL
+ * boundary (pagination rides on this later). Rows arrive initially from the
+ * .astro shell; a toggle keeps the previous list visible until the fetch
+ * lands (stale responses from rapid re-toggles are dropped).
  */
-export function ProfileRatings({ rows, now }: ProfileRatingsProps): ReactNode {
+export function ProfileRatings({ rows: initialRows, now }: ProfileRatingsProps): ReactNode {
   const [sort, setSort] = useState<SortState>({ field: 'created', direction: 'desc' });
+  const [rows, setRows] = useState(initialRows);
+  const [inFlight, setInFlight] = useState(false);
+  const [error, setError] = useState('');
+  // Staleness guard: only the most recent toggle's response may land.
+  const requestRef = useRef(0);
 
   const toggle = (field: SortField): void => {
-    setSort((current) =>
-      current.field === field
-        ? { field, direction: current.direction === 'desc' ? 'asc' : 'desc' }
-        : { field, direction: FIELD_DEFAULTS[field] },
-    );
+    const next: SortState =
+      sort.field === field
+        ? { field, direction: sort.direction === 'desc' ? 'asc' : 'desc' }
+        : { field, direction: FIELD_DEFAULTS[field] };
+    setSort(next);
+    const requestId = requestRef.current + 1;
+    requestRef.current = requestId;
+    setInFlight(true);
+    setError('');
+    void fetch(`/api/ratings?sort=${next.field}&dir=${next.direction}`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`re-sort failed (${response.status})`);
+        return (await response.json()) as { rows: MyRatingRow[] };
+      })
+      .then((payload) => {
+        if (requestRef.current === requestId) {
+          setRows(payload.rows);
+          setInFlight(false);
+        }
+      })
+      .catch(() => {
+        if (requestRef.current === requestId) {
+          setError('re-sort failed — try again');
+          setInFlight(false);
+        }
+      });
   };
-
-  const sorted = [...rows].sort((a, b) => compareRows(a, b, sort));
 
   return (
     <div className="flex flex-col gap-4">
@@ -150,15 +165,26 @@ export function ProfileRatings({ rows, now }: ProfileRatingsProps): ReactNode {
           );
         })}
       </div>
+      <Show when={error}>
+        <p className="text-xs text-red-300" role="alert">{error}</p>
+      </Show>
       <Switch>
-        <Match when={sorted.length === 0}>
+        <Match when={rows.length === 0}>
           <p className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-6 text-sm text-zinc-500">
             no ratings yet — open an album and give it a score.
           </p>
         </Match>
-        <Match when={sorted.length > 0}>
-          <ul className="divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900">
-            {sorted.map((row) => (
+        <Match when={rows.length > 0}>
+          <ul
+            className={
+              inFlight
+                ? 'divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900 opacity-60 transition-opacity'
+                : 'divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900'
+            }
+            data-testid="ratings-list"
+            data-in-flight={inFlight ? 'true' : undefined}
+          >
+            {rows.map((row) => (
               <RatingRow key={row.id} row={row} now={now} />
             ))}
           </ul>
