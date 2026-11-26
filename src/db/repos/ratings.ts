@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 
 import { albums, avatars, ratings, users, type Rating } from '../schema.ts';
 import type { Db } from '../index.ts';
@@ -88,30 +88,18 @@ export async function listRatingsForAlbum(db: Db, albumId: string): Promise<Rati
     .orderBy(desc(ratings.createdAt));
 }
 
-/** All ratings by one member — the personal history view (issue #37). */
-export type RatingHistorySort = {
-  /**
-   * "created" = first rated (created_at survives edits), "score" = the
-   * member's own current rating. Ties break by ratings.id DESC so repeated
-   * requests page/sort identically.
-   */
-  field: 'created' | 'score';
-  direction: 'asc' | 'desc';
-};
-
 export type MyRatingRow = Rating & {
   albumTitle: string;
   albumArtist: string;
   albumYear: number | null;
 };
 
-/** One member's ratings joined with their albums — the /profile read model (issue #50). */
-export async function listRatingsByUser(
-  db: Db,
-  userId: number,
-  sort: RatingHistorySort = { field: 'created', direction: 'desc' },
-): Promise<MyRatingRow[]> {
-  const primary = sort.field === 'score' ? ratings.score : ratings.createdAt;
+/**
+ * One member's ratings joined with their albums — the /profile read model
+ * (issue #50). Fixed order: first-rated, newest first, ties by ratings.id
+ * DESC; the island re-sorts client-side (issue #54), so no query params.
+ */
+export async function listRatingsByUser(db: Db, userId: number): Promise<MyRatingRow[]> {
   return db
     .select({
       id: ratings.id,
@@ -128,5 +116,5 @@ export async function listRatingsByUser(
     .from(ratings)
     .innerJoin(albums, eq(ratings.albumId, albums.id))
     .where(eq(ratings.userId, userId))
-    .orderBy(sort.direction === 'asc' ? asc(primary) : desc(primary), desc(ratings.id));
+    .orderBy(desc(ratings.createdAt), desc(ratings.id));
 }

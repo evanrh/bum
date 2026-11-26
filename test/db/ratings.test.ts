@@ -95,15 +95,15 @@ describe('ratings repo', () => {
   });
 });
 
-describe('listRatingsByUser — personal history (issue #37)', () => {
+describe('listRatingsByUser — personal history', () => {
   let albumB = '';
   let albumC = '';
 
   beforeEach(async () => {
     albumB = await makeAlbumId(db, '2026-01-12', fixture.carol.id);
     albumC = await makeAlbumId(db, '2026-01-19', fixture.dave.id);
-    // bob rates all three albums: distinct recency, a score tie between the
-    // outer two; carol rates one of the same albums for isolation checks.
+    // bob rates the three albums with distinct recency; carol rates one of
+    // the same albums for the isolation check.
     await ratingsRepo.upsertRating(
       db,
       { albumId: jazzId, userId: fixture.bob.id, score: 5, comment: 'first take' },
@@ -114,6 +114,7 @@ describe('listRatingsByUser — personal history (issue #37)', () => {
     await ratingsRepo.upsertRating(db, { albumId: jazzId, userId: fixture.carol.id, score: 2 }, now + 15);
   });
 
+  // The one order the SQL still ships (issue #54): the island re-sorts client-side.
   it('defaults to first-rated, newest first, with the album joined in', async () => {
     const rows = await ratingsRepo.listRatingsByUser(db, fixture.bob.id);
     expect(rows.map((r) => r.albumTitle)).toEqual([
@@ -131,46 +132,14 @@ describe('listRatingsByUser — personal history (issue #37)', () => {
     expect(rows[1]).toMatchObject({ score: 9, comment: 'great' });
   });
 
-  it('honours created asc and score asc/desc; score ties break by id desc', async () => {
-    const oldestFirst = await ratingsRepo.listRatingsByUser(db, fixture.bob.id, {
-      field: 'created',
-      direction: 'asc',
-    });
-    expect(oldestFirst.map((r) => r.albumTitle)).toEqual([
-      'album for week 2026-01-05',
-      'album for week 2026-01-12',
-      'album for week 2026-01-19',
-    ]);
-    const highestFirst = await ratingsRepo.listRatingsByUser(db, fixture.bob.id, {
-      field: 'score',
-      direction: 'desc',
-    });
-    expect(highestFirst.map((r) => r.albumId)).toEqual([albumB, albumC, jazzId]);
-    const lowestFirst = await ratingsRepo.listRatingsByUser(db, fixture.bob.id, {
-      field: 'score',
-      direction: 'asc',
-    });
-    expect(lowestFirst.map((r) => r.albumId)).toEqual([albumC, jazzId, albumB]);
-  });
-
-  it('an edit keeps the recency position but reorders by the current score', async () => {
-    await ratingsRepo.upsertRating(
-      db,
-      { albumId: jazzId, userId: fixture.bob.id, score: 4, comment: 'cooled' },
-      now + 1000,
-    );
-    const newestFirst = await ratingsRepo.listRatingsByUser(db, fixture.bob.id);
-    expect(newestFirst.map((r) => r.albumTitle)).toEqual([
-      'album for week 2026-01-19',
-      'album for week 2026-01-12',
-      'album for week 2026-01-05',
-    ]);
-    expect(newestFirst[2]?.createdAt).toBe(now + 10);
-    const lowestFirst = await ratingsRepo.listRatingsByUser(db, fixture.bob.id, {
-      field: 'score',
-      direction: 'asc',
-    });
-    expect(lowestFirst.map((r) => r.albumId)).toEqual([jazzId, albumC, albumB]);
+  it('equal created_at breaks by ratings.id desc', async () => {
+    const albumD = await makeAlbumId(db, '2026-01-26', fixture.dave.id);
+    const tied = await ratingsRepo.upsertRating(db, { albumId: albumD, userId: fixture.bob.id, score: 5 }, now + 30);
+    const albumCRow = await ratingsRepo.getRatingFor(db, albumC, fixture.bob.id);
+    expect(albumCRow?.createdAt).toBe(tied.createdAt); // a genuine tie…
+    expect(tied.id).toBeGreaterThan(albumCRow?.id ?? tied.id); // …resolved by the newer id
+    const rows = await ratingsRepo.listRatingsByUser(db, fixture.bob.id);
+    expect(rows.map((r) => r.albumId)).toEqual([albumD, albumC, albumB, jazzId]);
   });
 
   it('lists only the requested member', async () => {
