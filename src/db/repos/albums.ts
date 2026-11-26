@@ -1,6 +1,6 @@
 import { asc, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
-import { albums, ratings, type Album } from '../schema.ts';
+import { albums, ratings, users, type Album } from '../schema.ts';
 import type { Db } from '../index.ts';
 
 export type CreateAlbumInput = {
@@ -117,7 +117,12 @@ const albumColumns = {
   note: albums.note,
 };
 
-export type AlbumWithStats = Album & { avgScore: number | null; ratingCount: number };
+export type AlbumWithStats = Album & {
+  avgScore: number | null;
+  ratingCount: number;
+  /** Submitting member's display name (users join, issue #62) — null only if the member row is gone. */
+  submitterName: string | null;
+};
 
 /** One decimal place, exactly as rendered in the UI. */
 const normalizeAvg = (value: unknown): number | null =>
@@ -129,6 +134,7 @@ const cntExpr = sql<number>`count(${ratings.id})`;
 type AlbumSqliteAggregateRow = Album & {
   avgScore: string | number | null;
   ratingCount: string | number;
+  submitterName: string | null;
 };
 
 export type ListAlbumsOptions = {
@@ -141,7 +147,9 @@ export type ListAlbumsOptions = {
 /**
  * Album list with rating aggregates. `sort: 'avg'` orders by average score
  * descending (albums without ratings last), ties broken by fewer ratings
- * first, then newest.
+ * first, then newest. Items carry the submitter's display name (issue #62:
+ * the AlbumGrid island renders cards straight from the API response —
+ * deactivated members still resolve; a missing row lands as null).
  */
 export async function listAlbums(
   db: Db,
@@ -154,9 +162,10 @@ export async function listAlbums(
       : [desc(albums.submittedAt)];
 
   const rows = (await db
-    .select({ ...albumColumns, avgScore: avgExpr, ratingCount: cntExpr })
+    .select({ ...albumColumns, avgScore: avgExpr, ratingCount: cntExpr, submitterName: users.displayName })
     .from(albums)
     .leftJoin(ratings, eq(ratings.albumId, albums.id))
+    .leftJoin(users, eq(users.id, albums.submittedBy))
     .where(where)
     .groupBy(albums.id)
     .orderBy(...orderBy)

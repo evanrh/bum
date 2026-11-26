@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { eq } from 'drizzle-orm';
 
 import * as albumsRepo from '../../src/db/repos/albums.ts';
 import * as ratingsRepo from '../../src/db/repos/ratings.ts';
 import * as settingsRepo from '../../src/db/repos/settings.ts';
 import type { Db } from '../../src/db/index.ts';
+import { users } from '../../src/db/schema.ts';
 import { createAlbum, listAlbums, listMyRatings, putRating, removeRating } from '../../src/lib/api/albums.ts';
 import { sessionCookie } from '../../src/lib/auth.ts';
 import { sessionStore } from '../../src/lib/sessions.ts';
@@ -119,16 +121,33 @@ describe('GET /api/albums', () => {
 
     const response = await listAlbums(new Request('http://localhost:4321/api/albums?sort=newest'), db);
     expect(response.status).toBe(200);
-    const list = (await response.json()) as { items: Array<{ title: string; avgScore: null; ratingCount: number }>; total: number };
+    const list = (await response.json()) as {
+      items: Array<{ title: string; avgScore: null; ratingCount: number; submitterName: string | null }>;
+      total: number;
+    };
     expect(list.total).toBe(2);
     expect(list.items).toHaveLength(2);
     expect(list.items[0].avgScore).toBeNull();
     expect(list.items[0].ratingCount).toBe(0);
+    // Submitter display names ride on the API response (issue #62).
+    expect(list.items.map((item) => item.submitterName)).toEqual(['bob', 'carol']);
 
     const byBob = await listAlbums(new Request(`http://localhost:4321/api/albums?by=${members.bob.id}`), db);
     const bobList = (await byBob.json()) as { items: Array<{ submitterName?: string; title: string }>; total: number };
     expect(bobList.total).toBe(1);
     expect(bobList.items[0].title).toBe('Kind of Blue');
+    expect(bobList.items[0].submitterName).toBe('bob');
+  });
+
+  it('resolves deactivated submitters too (issue #62) — the join keys on the user row', async () => {
+    await albumsRepo.insertAlbum(db, {
+      title: 'Older Album', artist: 'Someone', submittedBy: members.dave.id, submittedAt: 500, weekStart: '2026-01-26',
+    });
+    db.update(users).set({ isActive: false }).where(eq(users.id, members.dave.id)).run();
+
+    const response = await listAlbums(new Request('http://localhost:4321/api/albums'), db);
+    const list = (await response.json()) as { items: Array<{ title: string; submitterName: string | null }> };
+    expect(list.items[0]).toMatchObject({ title: 'Older Album', submitterName: 'dave' });
   });
 
   it('sort=avg orders by average score', async () => {

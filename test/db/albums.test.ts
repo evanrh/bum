@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
 
 import * as albumsRepo from '../../src/db/repos/albums.ts';
 import * as ratingsRepo from '../../src/db/repos/ratings.ts';
+import { users } from '../../src/db/schema.ts';
 import { makeDb, seedMembers, type FixtureMembers } from './helpers.ts';
 
 let db: ReturnType<typeof makeDb>;
@@ -83,10 +85,26 @@ describe('albums repo', () => {
     expect(bySubmitter.total).toBe(2);
     expect(bySubmitter.items.map((a) => a.title)).toEqual(['punk', 'jazz']);
 
+    // Submitter display names ride on every row (issue #62).
+    expect(byNewest.items.map((a) => a.submitterName)).toEqual(['bob', 'carol', 'bob']);
+
     const paged = await albumsRepo.listAlbums(db, { sort: 'newest', limit: 1, offset: 0 });
     expect(paged.items).toHaveLength(1);
     expect(paged.total).toBe(3);
     expect(paged.items[0].title).toBe('punk');
+  });
+
+  it('resolves submitter names from the users join — deactivated members included (issue #62)', async () => {
+    const album = await albumsRepo.insertAlbum(db, {
+      title: 'orphan', artist: 'x', submittedBy: fixture.dave.id, submittedAt: 400, weekStart: '2026-01-26',
+    });
+    if (!album.ok) throw new Error('insert should succeed');
+    // The join keys on the user row, not on activity — a deactivated picker's
+    // past picks still carry their name; the client renders null as 'unknown'.
+    db.update(users).set({ isActive: false }).where(eq(users.id, fixture.dave.id)).run();
+
+    const list = await albumsRepo.listAlbums(db, { sort: 'newest' });
+    expect(list.items[0]).toMatchObject({ title: 'orphan', submitterName: 'dave' });
   });
 
   it('statsForAlbums aggregates per id, zeroes unrated ones, skips unknown ones', async () => {
