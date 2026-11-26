@@ -69,7 +69,6 @@ function respondUser(user: User): Response {
 export type RosterEntry = User & {
   submissionCount: number;
   ratingCount: number;
-  queuePosition: number | null;
 };
 
 /** Roster assembly shared by the GET handler and the /admin page. */
@@ -77,17 +76,14 @@ export async function buildRoster(db: Db): Promise<RosterEntry[]> {
   const users = await usersRepo.listAllUsers(db);
   const submissionCounts = await countBy(db, 'submissions');
   const ratingCounts = await countBy(db, 'ratings');
-  const queue = await settingsRepo.getRotation(db);
-  const positionOf = new Map(queue.map((id, index) => [id, index + 1]));
   return users.map((user) => ({
     ...user,
     submissionCount: submissionCounts.get(user.id) ?? 0,
     ratingCount: ratingCounts.get(user.id) ?? 0,
-    queuePosition: positionOf.get(user.id) ?? null,
   }));
 }
 
-/** GET /api/admin/users — roster + counts + queue positions. */
+/** GET /api/admin/users — roster + counts (queue order lives in /admin's rotation section). */
 export async function listUsers(db: Db, admin: User | null): Promise<Response> {
   try {
     requireAdmin({ user: admin });

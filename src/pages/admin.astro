@@ -50,7 +50,7 @@ const audit = isAdmin ? await auditRepo.listRecentAudit(db, 50) : [];
 
       <section class="mb-6" aria-label="users">
         <h2 class="mb-3 text-sm font-semibold tracking-wide text-zinc-500 uppercase">members</h2>
-        <AdminUsers client:load users={roster.map((entry) => ({ ...entry, username: entry.username, submissionCount: entry.submissionCount, ratingCount: entry.ratingCount, queuePosition: entry.queuePosition }))} />
+        <AdminUsers client:load users={roster.map((entry) => ({ ...entry, username: entry.username, submissionCount: entry.submissionCount, ratingCount: entry.ratingCount }))} />
       </section>
 
       <section class="mb-6" aria-label="rotation">

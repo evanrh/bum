@@ -1,4 +1,18 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+  faKey,
+  faLock,
+  faUserCheck,
+  faUserMinus,
+  faUserPlus,
+  faUserSlash,
+  type IconDefinition,
+} from '@fortawesome/free-solid-svg-icons';
+
+import { Match } from '../react/Match.tsx';
+import { Show } from '../react/Show.tsx';
+import { Switch } from '../react/Switch.tsx';
 
 export type AdminUserRow = {
   id: number;
@@ -10,10 +24,34 @@ export type AdminUserRow = {
   joinedAt: number;
   submissionCount: number;
   ratingCount: number;
-  queuePosition: number | null;
 };
 
-export function AdminUsers({ users: initial }: { users: AdminUserRow[] }) {
+const LOCKED_LABEL = 'the first member ever — permanently admin';
+
+type IconButtonProps = {
+  icon: IconDefinition;
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+};
+
+/** Icon-only action — `title` is the tooltip, `aria-label` the name (issue #53). */
+function IconButton({ icon, label, disabled, onClick }: IconButtonProps): ReactNode {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className="flex h-7 w-7 items-center justify-center rounded border border-zinc-700 text-xs text-zinc-300 hover:border-zinc-500 disabled:opacity-50"
+    >
+      <FontAwesomeIcon icon={icon} aria-hidden="true" />
+    </button>
+  );
+}
+
+export function AdminUsers({ users: initial }: { users: AdminUserRow[] }): ReactNode {
   const [users, setUsers] = useState(initial);
   const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -54,7 +92,6 @@ export function AdminUsers({ users: initial }: { users: AdminUserRow[] }) {
         <thead className="text-left text-xs tracking-wide text-zinc-500 uppercase">
           <tr>
             <th className="px-4 py-3">member</th>
-            <th className="px-4 py-3">queue</th>
             <th className="px-4 py-3">picks</th>
             <th className="px-4 py-3">ratings</th>
             <th className="px-4 py-3">role</th>
@@ -67,9 +104,10 @@ export function AdminUsers({ users: initial }: { users: AdminUserRow[] }) {
               <td className="px-4 py-3">
                 <span className="font-medium text-zinc-200">{user.displayName}</span>{' '}
                 <span className="text-xs text-zinc-500">@{user.username}</span>
-                {!user.isActive && <span className="ml-2 text-xs text-red-300">deactivated — loses login; history stays</span>}
+                <Show when={!user.isActive}>
+                  <span className="ml-2 text-xs text-red-300">deactivated — loses login; history stays</span>
+                </Show>
               </td>
-              <td className="px-4 py-3 text-zinc-400">{user.queuePosition ?? '—'}</td>
               <td className="px-4 py-3 text-zinc-400">{user.submissionCount}</td>
               <td className="px-4 py-3 text-zinc-400">{user.ratingCount}</td>
               <td className="px-4 py-3 text-zinc-400">
@@ -79,45 +117,62 @@ export function AdminUsers({ users: initial }: { users: AdminUserRow[] }) {
               </td>
               <td className="px-4 py-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  {user.isAdmin ? (
-                    user.isOriginalAdmin ? (
+                  <Switch>
+                    <Match when={user.isAdmin && user.isOriginalAdmin}>
                       <span
-                        className="rounded border border-amber-500/50 px-2 py-1 text-xs text-amber-400"
-                        title="the first member ever — permanently admin"
+                        className="flex h-7 items-center justify-center rounded border border-amber-500/50 px-2 text-xs text-amber-400"
+                        title={LOCKED_LABEL}
+                        aria-label={LOCKED_LABEL}
+                        role="img"
                       >
-                        super admin — locked
+                        <FontAwesomeIcon icon={faLock} aria-hidden="true" />
                       </span>
-                    ) : (
-                      <button type="button" disabled={busyId !== null} onClick={() => void act(user, 'demote')}
-                        className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-zinc-500">
-                        demote
-                      </button>
-                    )
-                  ) : (
-                    <button type="button" disabled={busyId !== null} onClick={() => void act(user, 'promote')}
-                      className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-zinc-500">
-                      promote
-                    </button>
-                  )}
-                  {user.isActive ? (
-                    <button type="button" disabled={busyId !== null} onClick={() => void act(user, 'deactivate')}
-                      className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-zinc-500">
-                      deactivate
-                    </button>
-                  ) : (
-                    <button type="button" disabled={busyId !== null} onClick={() => void act(user, 'activate')}
-                      className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-zinc-500">
-                      activate
-                    </button>
-                  )}
-                  <button type="button" disabled={busyId !== null} onClick={() => void resetPassword(user)}
-                    className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-zinc-500">
-                    reset password
-                  </button>
+                    </Match>
+                    <Match when={user.isAdmin}>
+                      <IconButton
+                        icon={faUserMinus}
+                        label={`demote ${user.username}`}
+                        disabled={busyId !== null}
+                        onClick={() => void act(user, 'demote')}
+                      />
+                    </Match>
+                    <Match when={!user.isAdmin}>
+                      <IconButton
+                        icon={faUserPlus}
+                        label={`promote ${user.username}`}
+                        disabled={busyId !== null}
+                        onClick={() => void act(user, 'promote')}
+                      />
+                    </Match>
+                  </Switch>
+                  <Show
+                    when={user.isActive}
+                    fallback={
+                      <IconButton
+                        icon={faUserCheck}
+                        label={`activate ${user.username}`}
+                        disabled={busyId !== null}
+                        onClick={() => void act(user, 'activate')}
+                      />
+                    }
+                  >
+                    <IconButton
+                      icon={faUserSlash}
+                      label={`deactivate ${user.username}`}
+                      disabled={busyId !== null}
+                      onClick={() => void act(user, 'deactivate')}
+                    />
+                  </Show>
+                  <IconButton
+                    icon={faKey}
+                    label={`reset ${user.username}'s password`}
+                    disabled={busyId !== null}
+                    onClick={() => void resetPassword(user)}
+                  />
                 </div>
-                {rowErrors[user.id] && (
+                <Show when={rowErrors[user.id]}>
                   <p className="mt-1 text-xs text-red-300" role="alert">{rowErrors[user.id]}</p>
-                )}
+                </Show>
               </td>
             </tr>
           ))}

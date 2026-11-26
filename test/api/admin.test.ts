@@ -82,7 +82,7 @@ describe('guards', () => {
 });
 
 describe('GET /api/admin/users', () => {
-  it('reports counts and queue positions', async () => {
+  it('reports counts; no queue position rides along (issue #53)', async () => {
     const inserted = await albumsRepo.insertAlbum(db, {
       title: 'X', artist: 'Y', submittedBy: members.bob.id, submittedAt: 1000, weekStart: '2026-01-05',
     });
@@ -91,12 +91,14 @@ describe('GET /api/admin/users', () => {
 
     const response = await listUsers(db, admin);
     const body = (await response.json()) as {
-      users: Array<{ id: number; username: string; submissionCount: number; ratingCount: number; queuePosition: number | null }>;
+      users: Array<{ id: number; username: string; submissionCount: number; ratingCount: number }>;
     };
     const bob = body.users.find((user) => user.id === members.bob.id)!;
-    expect(bob).toMatchObject({ username: 'bob', submissionCount: 1, ratingCount: 0, queuePosition: 1 });
+    expect(bob).toMatchObject({ username: 'bob', submissionCount: 1, ratingCount: 0 });
     const carol = body.users.find((user) => user.id === members.carol.id)!;
-    expect(carol).toMatchObject({ ratingCount: 1, queuePosition: 2 });
+    expect(carol).toMatchObject({ ratingCount: 1 });
+    expect(bob).not.toHaveProperty('queuePosition');
+    expect(carol).not.toHaveProperty('queuePosition');
   });
 });
 
