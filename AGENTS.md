@@ -17,6 +17,11 @@ of 2026-11-21, issue #31; T01–T09 remain there as history.)
    number (or a clear topic) in the branch name so commits and PRs
    trace back to the issue. Docs count as work: a docs change gets a
    `docs/…` branch, not a direct commit to `main`.
+   **Do the work in a dedicated worktree** (`git worktree add …`), never
+   in the owner's checkout — the owner's checkout stays on `main`, its
+   own in-flight edits untouched. Work in the owner's checkout only when
+   the owner explicitly asks; leave parallel WIP there alone (stage your
+   own files by explicit path, never `git add -A`/`git add .`).
 2. **No direct commits to `main`.** `main` only moves via PR merges.
 3. **PR when the work is done.** Acceptance criteria ticked on the
    issue, and `npm test`, `npm run test:coverage`, `npm run typecheck`

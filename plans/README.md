@@ -31,6 +31,9 @@ they bind every change.
    named after the issue (`feat/31-opengraph`, `fix/27-covers-self-heal`,
    `docs/rotation-model`) and only touch that branch. Docs changes get a
    `docs/…` branch. `main` moves via PR merges only — see `AGENTS.md`.
+   The work happens in a **dedicated worktree** (`git worktree add …`),
+   not the owner's checkout, so `main` and the owner's in-flight edits
+   stay untouched — unless the owner explicitly asks otherwise.
 2. Read the issue top to bottom, then implement. Do not start dependent
    work belonging to later issues "while you're in there".
 3. Every issue carries its own tests. The suite (`npm test`) and the
