@@ -159,26 +159,35 @@ jobs:
 
       - name: checks (exec inside the running container)
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           for _ in $(seq 1 45); do
             curl -sf http://127.0.0.1:4321/api/health >/dev/null 2>&1 && break
             sleep 2
           done
           timeout 30 curl -sf http://127.0.0.1:4321/api/health | grep -q '"ok":true'
+          echo '✓ /api/health ok'
           timeout 30 curl -sf http://127.0.0.1:4321/ | grep -q 'og:url" content="http://127.0.0.1:4321/"'
-          timeout 30 docker logs bum-ci 2>&1 | grep -q 'migrations applied'
-          timeout 30 docker logs bum-ci 2>&1 | grep -q 'jobs runner ready'
+          echo '✓ homepage og:url'
+          # Docker STREAMS logs; the early-exit greps raced that writer when
+          # they piped it (silent SIGPIPE-ish exit-13 flakes on this step).
+          # Capture once to a file, then grep the file with plain exit codes.
+          timeout 30 docker logs bum-ci >/tmp/boot.log 2>&1
+          grep -q 'migrations applied' /tmp/boot.log
+          echo '✓ migrations applied'
+          grep -q 'jobs runner ready' /tmp/boot.log
+          echo '✓ jobs runner ready'
           # A pinned BOOTSTRAP_JOIN_CODE is honored silently — the code must
           # never appear in the logs (only a generated one is shown once).
-          if timeout 30 docker logs bum-ci 2>&1 | grep -q 'bootstrap join code:'; then
+          if grep -q 'bootstrap join code:' /tmp/boot.log; then
             echo 'pinned join code leaked into the container log'
-            docker logs bum-ci | tail -20
+            tail -20 /tmp/boot.log
             exit 1
           fi
+          echo '✓ bootstrap join code silent'
           # The covers lever — via exec, on the same data. Root-owned WAL
           # files would break it, so this also asserts the drop-to-node.
-          timeout 60 docker exec -u node bum-ci \
-            node dist/jobs/backfill-covers.mjs
+          timeout 60 docker exec -u node bum-ci node dist/jobs/backfill-covers.mjs
+          echo '✓ covers lever'
 
       - name: checks — preflight refuses a missing SITE_URL
         run: |
