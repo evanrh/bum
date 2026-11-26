@@ -13,6 +13,7 @@ import {
 import { Match } from '../react/Match.tsx';
 import { Show } from '../react/Show.tsx';
 import { Switch } from '../react/Switch.tsx';
+import { Tooltip } from '../react/Tooltip.tsx';
 
 export type AdminUserRow = {
   id: number;
@@ -30,24 +31,27 @@ const LOCKED_LABEL = 'the first member ever — permanently admin';
 
 type IconButtonProps = {
   icon: IconDefinition;
+  tip: string;
   label: string;
   disabled: boolean;
   onClick: () => void;
 };
 
-/** Icon-only action — `title` is the tooltip, `aria-label` the name (issue #53). */
-function IconButton({ icon, label, disabled, onClick }: IconButtonProps): ReactNode {
+/** Icon-only action — tip/title carry the bare action word, `aria-label` the row name (issues #53, #58). */
+function IconButton({ icon, tip, label, disabled, onClick }: IconButtonProps): ReactNode {
   return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      title={label}
-      aria-label={label}
-      className="flex h-7 w-7 items-center justify-center rounded border border-zinc-700 text-xs text-zinc-300 hover:border-zinc-500 disabled:opacity-50"
-    >
-      <FontAwesomeIcon icon={icon} aria-hidden="true" />
-    </button>
+    <Tooltip text={tip}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onClick}
+        title={tip}
+        aria-label={label}
+        className="flex h-7 w-7 items-center justify-center rounded border border-zinc-700 text-xs text-zinc-300 hover:border-zinc-500 disabled:opacity-50"
+      >
+        <FontAwesomeIcon icon={icon} aria-hidden="true" />
+      </button>
+    </Tooltip>
   );
 }
 
@@ -119,18 +123,21 @@ export function AdminUsers({ users: initial }: { users: AdminUserRow[] }): React
                 <div className="flex flex-wrap items-center gap-2">
                   <Switch>
                     <Match when={user.isAdmin && user.isOriginalAdmin}>
-                      <span
-                        className="flex h-7 items-center justify-center rounded border border-amber-500/50 px-2 text-xs text-amber-400"
-                        title={LOCKED_LABEL}
-                        aria-label={LOCKED_LABEL}
-                        role="img"
-                      >
-                        <FontAwesomeIcon icon={faLock} aria-hidden="true" />
-                      </span>
+                      <Tooltip text="Original admin">
+                        <span
+                          className="flex h-7 w-7 items-center justify-center rounded border border-amber-500/50 text-xs text-amber-400"
+                          title="Original admin"
+                          aria-label={LOCKED_LABEL}
+                          role="img"
+                        >
+                          <FontAwesomeIcon icon={faLock} aria-hidden="true" />
+                        </span>
+                      </Tooltip>
                     </Match>
                     <Match when={user.isAdmin}>
                       <IconButton
                         icon={faUserMinus}
+                        tip="Demote"
                         label={`demote ${user.username}`}
                         disabled={busyId !== null}
                         onClick={() => void act(user, 'demote')}
@@ -139,6 +146,7 @@ export function AdminUsers({ users: initial }: { users: AdminUserRow[] }): React
                     <Match when={!user.isAdmin}>
                       <IconButton
                         icon={faUserPlus}
+                        tip="Promote"
                         label={`promote ${user.username}`}
                         disabled={busyId !== null}
                         onClick={() => void act(user, 'promote')}
@@ -150,6 +158,7 @@ export function AdminUsers({ users: initial }: { users: AdminUserRow[] }): React
                     fallback={
                       <IconButton
                         icon={faUserCheck}
+                        tip="Activate"
                         label={`activate ${user.username}`}
                         disabled={busyId !== null}
                         onClick={() => void act(user, 'activate')}
@@ -158,6 +167,7 @@ export function AdminUsers({ users: initial }: { users: AdminUserRow[] }): React
                   >
                     <IconButton
                       icon={faUserSlash}
+                      tip="Deactivate"
                       label={`deactivate ${user.username}`}
                       disabled={busyId !== null}
                       onClick={() => void act(user, 'deactivate')}
@@ -165,6 +175,7 @@ export function AdminUsers({ users: initial }: { users: AdminUserRow[] }): React
                   </Show>
                   <IconButton
                     icon={faKey}
+                    tip="Reset password"
                     label={`reset ${user.username}'s password`}
                     disabled={busyId !== null}
                     onClick={() => void resetPassword(user)}

@@ -36,22 +36,43 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('<AdminUsers> (issue #53 — icon actions, no queue column)', () => {
-  it('drops the queue column; every action is an icon button with a tooltip + accessible name', () => {
+describe('<AdminUsers> (issues #53, #58 — icon actions with Bootstrap-style tooltips)', () => {
+  it('drops the queue column; every action is an icon button with a bare-action tip + row-specific aria name', () => {
     render(<AdminUsers users={[row(), row({ id: 2, username: 'carol', isAdmin: true })]} />);
     expect(screen.queryByText('queue')).toBeNull();
-    for (const label of [
-      'promote bob',
-      'deactivate bob',
-      "reset bob's password",
-      'demote carol',
-      'deactivate carol',
-      "reset carol's password",
-    ]) {
-      const button = screen.getByRole('button', { name: label });
-      expect(button.getAttribute('title')).toBe(label);
-      expect(button.getAttribute('aria-label')).toBe(label);
+    for (const [tip, aria] of [
+      ['Promote', 'promote bob'],
+      ['Deactivate', 'deactivate bob'],
+      ['Reset password', "reset bob's password"],
+      ['Demote', 'demote carol'],
+      ['Deactivate', 'deactivate carol'],
+      ['Reset password', "reset carol's password"],
+    ] as const) {
+      const button = screen.getByRole('button', { name: aria });
+      expect(button.getAttribute('title')).toBe(tip);
+      expect(button.getAttribute('aria-label')).toBe(aria);
     }
+  });
+
+  it('every icon container is the same h-7 w-7 square; the lock keeps its amber styling', () => {
+    render(
+      <AdminUsers users={[row(), row({ id: 2, username: 'carol', isAdmin: true, isOriginalAdmin: true })]} />,
+    );
+    for (const name of ['deactivate bob', "reset bob's password", 'deactivate carol', "reset carol's password"]) {
+      expect(screen.getByRole('button', { name }).className).toContain('h-7 w-7');
+    }
+    const lock = screen.getByTitle('Original admin');
+    expect(lock.className).toContain('h-7 w-7');
+    expect(lock.className).toContain('border-amber-500/50');
+  });
+
+  it('hovering an action opens the portal tip with the bare action word', () => {
+    render(<AdminUsers users={[row()]} />);
+    const button = screen.getByRole('button', { name: 'deactivate bob' });
+    fireEvent.mouseEnter(button.parentElement as HTMLElement);
+    const tip = screen.getByText('Deactivate');
+    expect(tip.className).toContain('opacity-100');
+    expect(tip.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('deactivated members swap deactivate for activate', () => {
@@ -64,7 +85,8 @@ describe('<AdminUsers> (issue #53 — icon actions, no queue column)', () => {
     render(<AdminUsers users={[row({ isAdmin: true, isOriginalAdmin: true })]} />);
     expect(screen.queryByRole('button', { name: 'demote bob' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'promote bob' })).toBeNull();
-    const lock = screen.getByTitle('the first member ever — permanently admin');
+    const lock = screen.getByTitle('Original admin');
+    expect(lock.getAttribute('title')).toBe('Original admin');
     expect(lock.getAttribute('aria-label')).toBe('the first member ever — permanently admin');
   });
 
