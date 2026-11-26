@@ -56,8 +56,14 @@ jobs:
             npm pkg set version="${VERSION}"
             npm install --package-lock-only
             git add package.json package-lock.json
-            git -c user.name='bum-release' -c user.email='bum-release@users.noreply.github.com' \
-              commit -m "chore: bump version to ${VERSION}"
+            # The tree may already be at VERSION (a hand-bump, like #58's);
+            # a no-op must still produce the tag, not die on an empty commit.
+            if git diff --staged --quiet; then
+              echo "version already at ${VERSION} — syncing the tag only"
+            else
+              git -c user.name='bum-release' -c user.email='bum-release@users.noreply.github.com' \
+                commit -m "chore: bump version to ${VERSION}"
+            fi
             git tag -a "v${VERSION}" -m "bum ${VERSION} — automated release bump"
             # GITHUB_TOKEN push: no workflow recursion is possible.
             git push origin "v${VERSION}" HEAD:"$GITHUB_REF_NAME"
